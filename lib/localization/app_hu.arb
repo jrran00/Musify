@@ -154,5 +154,6 @@
   "useProxy": "Proxy használata",
   "userPlaylists": "Felhasználói lejátszási listák",
   "yes": "Yes",
-  "youtubePlaylistLinkOrId": "YouTube lejátszási lista vagy azonosító"
+  "youtubePlaylistLinkOrId": "YouTube lejátszási lista vagy azonosító",
+  "random": "random"
 }

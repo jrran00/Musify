@@ -154,5 +154,6 @@
   "useProxy": "استخدام الوكيل",
   "userPlaylists": "قوائم تشغيل المستخدم",
   "yes": "نعم",
-  "youtubePlaylistLinkOrId": "YouTube playlist link or ID "
+  "youtubePlaylistLinkOrId": "YouTube playlist link or ID ",
+  "random": "random"
 }

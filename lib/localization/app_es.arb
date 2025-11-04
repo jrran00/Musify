@@ -154,5 +154,6 @@
   "useProxy": "Usar proxy",
   "userPlaylists": "Listas de reproducción del usuario",
   "yes": "Si",
-  "youtubePlaylistLinkOrId": "Enlace o ID de lista de reproducción de YouTube"
+  "youtubePlaylistLinkOrId": "Enlace o ID de lista de reproducción de YouTube",
+  "random": "random"
 }

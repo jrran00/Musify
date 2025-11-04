@@ -154,5 +154,6 @@
   "useProxy": "Use proxy",
   "userPlaylists": "רשימות השמעה של המשתמש",
   "yes": "Yes",
-  "youtubePlaylistLinkOrId": "קישור או מזהה של רשימת השמעה מיוטיוב"
+  "youtubePlaylistLinkOrId": "קישור או מזהה של רשימת השמעה מיוטיוב",
+  "random": "random"
 }

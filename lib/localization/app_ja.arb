@@ -154,5 +154,6 @@
   "useProxy": "Use proxy",
   "userPlaylists": "再生リスト",
   "yes": "Yes",
-  "youtubePlaylistLinkOrId": "YouTube 再生リストのリンクかID "
+  "youtubePlaylistLinkOrId": "YouTube 再生リストのリンクかID ",
+  "random": "random"
 }
