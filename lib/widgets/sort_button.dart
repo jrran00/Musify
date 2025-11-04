@@ -26,12 +26,15 @@ import 'package:musify/utilities/common_variables.dart';
 typedef SortTypeToStringConverter<T> = String Function(T type);
 typedef OnSortTypeSelected<T> = void Function(T type);
 
+typedef AllowReselectPredicate<T> = bool Function(T type);
+
 class SortButton<T extends Enum> extends StatelessWidget {
   const SortButton({
     required this.currentSortType,
     required this.sortTypes,
     required this.sortTypeToString,
     required this.onSelected,
+    this.allowReselect,
     super.key,
   });
 
@@ -39,6 +42,7 @@ class SortButton<T extends Enum> extends StatelessWidget {
   final List<T> sortTypes;
   final SortTypeToStringConverter<T> sortTypeToString;
   final OnSortTypeSelected<T> onSelected;
+  final AllowReselectPredicate<T>? allowReselect;
 
   @override
   Widget build(BuildContext context) {
@@ -100,7 +104,10 @@ class SortButton<T extends Enum> extends StatelessWidget {
         }).toList();
       },
       onSelected: (type) {
-        if (type == currentSortType) return;
+        // If same type and reselection NOT allowed -> ignore
+        final reselectionAllowed =
+            allowReselect?.call(type) ?? false; // default false
+        if (type == currentSortType && !reselectionAllowed) return;
         onSelected(type);
       },
     );

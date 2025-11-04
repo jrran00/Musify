@@ -584,6 +584,8 @@ class _PlaylistPageState extends State<PlaylistPage> {
       currentSortType: _sortType,
       sortTypes: PlaylistSortType.values,
       sortTypeToString: _getSortTypeDisplayText,
+      // allow reselection only for the "random" sort type
+      allowReselect: (type) => type == PlaylistSortType.random,
       onSelected: (type) {
         setState(() {
           _sortType = type;
