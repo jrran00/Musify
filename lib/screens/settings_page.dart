@@ -287,8 +287,17 @@ class SettingsPage extends StatelessWidget {
           context.l10n!.restoreUserData,
           FluentIcons.cloud_add_24_filled,
           onTap: () async {
-            final response = await restoreData(context);
-            showToast(context, response);
+            try {
+              final response = await restoreData(context);
+              if (context.mounted) {
+                showToast(context, response);
+              }
+            } catch (e) {
+              logger.log('Error restoring data', e, null);
+              if (context.mounted) {
+                showToast(context, context.l10n!.error);
+              }
+            }
           },
         ),
         if (!isFdroidBuild)
@@ -412,6 +421,12 @@ class SettingsPage extends StatelessWidget {
           FluentIcons.document_24_filled,
           borderRadius: commonCustomBarRadiusFirst,
           onTap: () => NavigationManager.router.go('/settings/license'),
+        ),
+        CustomBar(
+          context.l10n!.translate,
+          FluentIcons.translate_24_filled,
+          onTap: () =>
+              launchURL(Uri.parse('https://crowdin.com/project/musify')),
         ),
         CustomBar(
           '${context.l10n!.copyLogs} (${logger.getLogCount()})',
@@ -710,23 +725,32 @@ class SettingsPage extends StatelessWidget {
   }
 
   Future<void> _backupUserData(BuildContext context) async {
-    await showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          content: Text(context.l10n!.folderRestrictions),
-          actions: <Widget>[
-            TextButton(
-              child: Text(context.l10n!.understand.toUpperCase()),
-              onPressed: () {
-                Navigator.pop(context);
-              },
-            ),
-          ],
-        );
-      },
-    );
-    final response = await backupData(context);
-    showToast(context, response);
+    try {
+      await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            content: Text(context.l10n!.folderRestrictions),
+            actions: <Widget>[
+              TextButton(
+                child: Text(context.l10n!.understand.toUpperCase()),
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+              ),
+            ],
+          );
+        },
+      );
+      final response = await backupData(context);
+      if (context.mounted) {
+        showToast(context, response);
+      }
+    } catch (e) {
+      logger.log('Error backing up data', e, null);
+      if (context.mounted) {
+        showToast(context, context.l10n!.error);
+      }
+    }
   }
 }
