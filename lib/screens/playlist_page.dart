@@ -665,7 +665,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
       addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value);
 
       // Show feedback to user
-      showToast(context, 'Playlist order updated');
+      //showToast(context, 'Playlist order updated');
     }
   }
 
