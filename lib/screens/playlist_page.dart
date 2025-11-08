@@ -42,6 +42,7 @@ import 'package:musify/widgets/playlist_header.dart';
 import 'package:musify/widgets/song_bar.dart';
 import 'package:musify/widgets/sort_button.dart';
 import 'package:musify/widgets/spinner.dart';
+import 'package:flutter_reorderable_list/flutter_reorderable_list.dart';
 
 enum PlaylistSortType { default_, title, artist, random }
 
@@ -227,17 +228,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
                     ),
                     SliverPadding(
                       padding: commonListViewBottmomPadding,
-                      sliver: PagedSliverList(
-                        state: state,
-                        fetchNextPage: fetchNextPage,
-                        builderDelegate: PagedChildBuilderDelegate<dynamic>(
-                          itemBuilder: (context, item, index) {
-                            final isRemovable =
-                                _playlist['source'] == 'user-created';
-                            return _buildSongListItem(item, index, isRemovable);
-                          },
-                        ),
-                      ),
+                      sliver: _buildSongList(),
                     ),
                   ] else
                     const SliverFillRemaining(child: SizedBox.expand()),
@@ -651,6 +642,113 @@ class _PlaylistPageState extends State<PlaylistPage> {
         audioHandler.playPlaylistSong(playlist: _playlist, songIndex: index),
       },
       borderRadius: borderRadius,
+      showDragHandle: false, // No drag handle for standard list
     );
+  }
+
+  // Add this missing method
+  void _saveCustomPlaylistOrder() {
+    final index = userCustomPlaylists.value.indexOf(widget.playlistData);
+    if (index != -1) {
+      final updatedPlaylists = List<Map>.from(userCustomPlaylists.value);
+      updatedPlaylists[index] = _playlist;
+      userCustomPlaylists.value = updatedPlaylists;
+      addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value);
+
+      // Show feedback to user
+      showToast(context, 'Playlist order updated');
+    }
+  }
+
+  Widget _buildSongList() {
+    final isDraggable =
+        _sortType == PlaylistSortType.default_ &&
+        _playlist['source'] == 'user-created';
+
+    if (isDraggable) {
+      return _buildReorderableSongList();
+    } else {
+      return _buildStandardSongList();
+    }
+  }
+
+  Widget _buildReorderableSongList() {
+    // Get items directly from the playlist since we're already loading everything
+    final items = _playlist['list'] as List<dynamic>;
+
+    return SliverReorderableList(
+      itemCount: items.length,
+      onReorder: _handleSongReorder,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        final isRemovable = _playlist['source'] == 'user-created';
+        final totalItems = items.length;
+        final borderRadius = getItemBorderRadius(index, totalItems);
+
+        return ReorderableDragStartListener(
+          key: ValueKey('${item['id']}_$index'),
+          index: index,
+          child: SongBar(
+            item,
+            true,
+            onRemove: isRemovable
+                ? () => {
+                    if (removeSongFromPlaylist(
+                      _playlist,
+                      item,
+                      removeOneAtIndex: index,
+                    ))
+                      {_updateSongsListOnRemove(index)},
+                  }
+                : null,
+            onPlay: () => {
+              audioHandler.playPlaylistSong(
+                playlist: _playlist,
+                songIndex: index,
+              ),
+            },
+            borderRadius: borderRadius,
+            showDragHandle: true,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStandardSongList() {
+    return PagingListener(
+      controller: _pagingController,
+      builder: (context, state, fetchNextPage) => PagedSliverList(
+        state: state,
+        fetchNextPage: fetchNextPage,
+        builderDelegate: PagedChildBuilderDelegate<dynamic>(
+          itemBuilder: (context, item, index) {
+            final isRemovable = _playlist['source'] == 'user-created';
+            return _buildSongListItem(item, index, isRemovable);
+          },
+        ),
+      ),
+    );
+  }
+
+  void _handleSongReorder(int oldIndex, int newIndex) {
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+
+    final playlistList = _playlist['list'] as List<dynamic>;
+    final item = playlistList.removeAt(oldIndex);
+    playlistList.insert(newIndex, item);
+
+    // Update original order
+    _originalPlaylistList.clear();
+    _originalPlaylistList.addAll(playlistList);
+
+    // Save for user-created playlists
+    if (_playlist['source'] == 'user-created') {
+      _saveCustomPlaylistOrder();
+    }
+
+    _pagingController.refresh();
   }
 }
