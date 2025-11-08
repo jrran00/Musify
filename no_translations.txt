@@ -1,1 +1,33 @@
-{}
+{
+  "pl": [
+    "random"
+  ],
+
+  "pt": [
+    "random"
+  ],
+
+  "ru": [
+    "random"
+  ],
+
+  "sv": [
+    "random"
+  ],
+
+  "tr": [
+    "random"
+  ],
+
+  "uk": [
+    "random"
+  ],
+
+  "zh": [
+    "random"
+  ],
+
+  "zh_Hant": [
+    "random"
+  ]
+}
