@@ -1,4 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#191919</color>
+        <!-- Widget colors -->
+    <color name="widget_background">#F8F8F8</color>
+    <color name="widget_text">#333333</color>
+    <color name="widget_text_secondary">#666666</color>
+    
+    <!-- Or for dark theme support -->
+    <color name="widget_background_dark">#1E1E1E</color>
+    <color name="widget_text_dark">#FFFFFF</color>
+    <color name="widget_text_secondary_dark">#B3B3B3</color>
+
+    <color name="widget_button_tint">#424242</color> <!-- Dark gray for buttons -->
 </resources>

@@ -43,7 +43,7 @@ import 'package:musify/widgets/song_bar.dart';
 import 'package:musify/widgets/sort_button.dart';
 import 'package:musify/widgets/spinner.dart';
 
-enum PlaylistSortType { default_, title, artist }
+enum PlaylistSortType { default_, title, artist, random }
 
 class PlaylistPage extends StatefulWidget {
   const PlaylistPage({
@@ -574,6 +574,8 @@ class _PlaylistPageState extends State<PlaylistPage> {
         return context.l10n!.name;
       case PlaylistSortType.artist:
         return context.l10n!.artist;
+      case PlaylistSortType.random:
+        return context.l10n!.random; // Make sure to add this translation
     }
   }
 
@@ -582,6 +584,8 @@ class _PlaylistPageState extends State<PlaylistPage> {
       currentSortType: _sortType,
       sortTypes: PlaylistSortType.values,
       sortTypeToString: _getSortTypeDisplayText,
+      // allow reselection only for the "random" sort type
+      allowReselect: (type) => type == PlaylistSortType.random,
       onSelected: (type) {
         setState(() {
           _sortType = type;
@@ -612,6 +616,11 @@ class _PlaylistPageState extends State<PlaylistPage> {
       case PlaylistSortType.artist:
         final playlist = List<dynamic>.from(_playlist['list']);
         sortSongsByKey(playlist, 'artist');
+        _playlist['list'] = playlist;
+        break;
+      case PlaylistSortType.random:
+        final playlist = List<dynamic>.from(_playlist['list']);
+        shufflePlaylistRandomly(playlist);
         _playlist['list'] = playlist;
         break;
     }

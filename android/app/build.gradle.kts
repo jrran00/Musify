@@ -51,6 +51,8 @@ android {
         targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Add build config fields for method channel
+        buildConfigField("String", "METHOD_CHANNEL", "\"com.gokadzev.musify/widget\"")
     }
 
     flavorDimensions += "flavor"
@@ -59,6 +61,10 @@ android {
         create("github") {
             dimension = "flavor"
             applicationIdSuffix = ""
+            // Override for github flavor
+            buildConfigField("String", "METHOD_CHANNEL", "\"com.gokadzev.musify/widget\"")
+            // Override for fdroid flavor
+            buildConfigField("String", "METHOD_CHANNEL", "\"com.gokadzev.musify.fdroid/widget\"")
         }
         create("fdroid") {
             dimension = "flavor"
@@ -97,6 +103,8 @@ android {
         getByName("debug") {
             applicationIdSuffix = ".debug"
             versionNameSuffix = " DEBUG"
+            // For debug builds, use the main package name
+            buildConfigField("String", "METHOD_CHANNEL", "\"com.gokadzev.musify.debug/widget\"")
         }
     }
 }

@@ -78,6 +78,10 @@ const appLanguages = <String, String>{
   'Ukrainian': 'uk',
 };
 
+// const MethodChannel _widgetChannel = MethodChannel(
+//   'com.gokadzev.musify/widget',
+// );
+
 final List<Locale> appSupportedLocales = appLanguages.values.map((
   languageCode,
 ) {
@@ -278,11 +282,97 @@ class _MusifyState extends State<Musify> {
   }
 }
 
+// void testChannelConnection() async {
+//   try {
+//     logger.log('Testing channel connection...', null, null);
+//     final result = await _widgetChannel.invokeMethod('testConnection');
+//     logger.log('Channel test SUCCESS: $result', null, null);
+//   } on PlatformException catch (e) {
+//     logger.log('Channel test FAILED: ${e.message}', null, null);
+//   } catch (e, stackTrace) {
+//     logger.log('Channel test ERROR', e, stackTrace);
+//   }
+// }
+
+// /// Call this once after audioHandler is initialized (e.g. after AudioService.init)
+// void setupWidgetMethodChannel() {
+//   _widgetChannel.setMethodCallHandler((call) async {
+//     logger.log('Widget method called from MAIN: ${call.method}', null, null);
+
+//     switch (call.method) {
+//       case 'togglePlay':
+//         logger.log('Toggle play received from widget in MAIN', null, null);
+//         final playing = audioHandler.playbackState.value.playing;
+//         if (playing) {
+//           await audioHandler.pause();
+//         } else {
+//           await audioHandler.play();
+//         }
+//         break;
+//       case 'next':
+//         logger.log('Next received from widget in MAIN', null, null);
+//         await audioHandler.skipToNext();
+//         break;
+//       case 'prev':
+//         logger.log('Previous received from widget in MAIN', null, null);
+//         await audioHandler.skipToPrevious();
+//         break;
+//       default:
+//         logger.log(
+//           'Unknown method from widget in MAIN: ${call.method}',
+//           null,
+//           null,
+//         );
+//     }
+//   });
+//   testChannelConnection();
+//   // WidgetsBinding.instance.addPostFrameCallback((_) {
+//   //   testWidgetChannel();
+//   // });
+// }
+
+/// Send an update request to the native side which forwards it to the widget provider.
+/// - title, artist: Strings
+/// - isPlaying: bool
+/// - albumPath: optional local file path or content:// URI for album art (must be accessible to Android).
+Future<void> updateWidgetFromDart({
+  required String title,
+  required String artist,
+  required bool isPlaying,
+  String? albumPath,
+}) async {
+  try {
+    logger.log(
+      'Sending widget update: $title - $artist, playing: $isPlaying',
+      null,
+      null,
+    );
+
+    final result = await platform.invokeMethod('updateWidget', {
+      'title': title,
+      'artist': artist,
+      'isPlaying': isPlaying,
+      if (albumPath != null) 'albumPath': albumPath,
+    });
+
+    logger.log('Widget update successful', null, null);
+  } on PlatformException catch (e) {
+    logger.log('Error updating widget', e, null);
+  } catch (e, stackTrace) {
+    logger.log('Unexpected error updating widget', e, stackTrace);
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initialisation();
 
   runApp(const Musify());
+
+  // Test channel connection after app is fully running
+  // WidgetsBinding.instance.addPostFrameCallback((_) {
+  //   debugActivityTiming();
+  // });
 }
 
 Future<void> initialisation() async {
@@ -295,6 +385,8 @@ Future<void> initialisation() async {
       Hive.openBox('userNoBackup'),
       Hive.openBox('cache'),
     ]);
+
+    //WidgetsFlutterBinding.ensureInitialized();
 
     audioHandler = await AudioService.init(
       builder: MusifyAudioHandler.new,
@@ -311,6 +403,9 @@ Future<void> initialisation() async {
         },
       ),
     );
+
+    initializeWidgetChannel();
+    //setupWidgetMethodChannel();
 
     // Init router
     NavigationManager.instance;

@@ -19,6 +19,8 @@
  *     please visit: https://github.com/gokadzev/Musify
  */
 
+import 'dart:math';
+
 /// Sorts a list of songs by a given key (title or artist)
 void sortSongsByKey(List<dynamic> songs, String sortKey) {
   songs.sort((a, b) {
@@ -26,4 +28,16 @@ void sortSongsByKey(List<dynamic> songs, String sortKey) {
     final valueB = (b[sortKey] ?? '').toString().toLowerCase();
     return valueA.compareTo(valueB);
   });
+}
+
+void shufflePlaylistRandomly(List<dynamic> playlist) {
+  final random = Random();
+  
+  // Fisher-Yates shuffle algorithm
+  for (var i = playlist.length - 1; i > 0; i--) {
+    final j = random.nextInt(i + 1);
+    final temp = playlist[i];
+    playlist[i] = playlist[j];
+    playlist[j] = temp;
+  }
 }

@@ -154,5 +154,6 @@
   "useProxy": "Χρήση διαμεσολαβητή",
   "userPlaylists": "Λίστες αναπαραγωγής χρήστη",
   "yes": "Ναι",
-  "youtubePlaylistLinkOrId": "YouTube playlist link or ID "
+  "youtubePlaylistLinkOrId": "YouTube playlist link or ID ",
+  "random": "random"
 }

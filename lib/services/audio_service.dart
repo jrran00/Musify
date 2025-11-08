@@ -33,11 +33,22 @@ import 'package:musify/services/settings_manager.dart';
 import 'package:musify/utilities/mediaitem.dart';
 import 'package:rxdart/rxdart.dart';
 
+import 'package:flutter/services.dart';
+
+const platform = MethodChannel('com.gokadzev.musify/widget');
+
 class MusifyAudioHandler extends BaseAudioHandler {
   MusifyAudioHandler() {
     _setupEventSubscriptions();
     _updatePlaybackState();
-
+    //_updateWidget(); // Initialize widget with current state
+    _updateWidget(); // Initialize widget with current state
+    // Future.delayed(const Duration(seconds: 2), () {
+    //   initializeWidgetChannel();
+    // });
+    // //initializeWidgetChannel();
+    // //setupWidgetMethodChannel();
+    //_startChannelHealthCheck(); // Add this line
     audioPlayer.setAndroidAudioAttributes(
       const AndroidAudioAttributes(
         contentType: AndroidAudioContentType.music,
@@ -68,8 +79,10 @@ class MusifyAudioHandler extends BaseAudioHandler {
   int _currentQueueIndex = 0;
   bool _isLoadingNextSong = false;
   bool _isUpdatingState = false;
-  int _songTransitionCounter =
-      0; // Track song transitions to prevent race conditions
+  int _songTransitionCounter = 0;
+
+  //current song Map
+  Map? curSong;
 
   // Error handling
   String? _lastError;
@@ -103,10 +116,6 @@ class MusifyAudioHandler extends BaseAudioHandler {
             (prev.bufferedPosition - curr.bufferedPosition).abs() < threshold;
       });
 
-  /// Optimized PlaybackState stream for UI consumption
-  ///
-  /// This stream provides efficient PlaybackState updates with filtering
-  /// to prevent unnecessary rebuilds when only irrelevant properties change.
   Stream<PlaybackState> get playbackStateStream => playbackState.distinct(
     (prev, curr) =>
         prev.playing == curr.playing &&
@@ -114,10 +123,6 @@ class MusifyAudioHandler extends BaseAudioHandler {
         prev.queueIndex == curr.queueIndex,
   );
 
-  /// Optimized Queue stream for UI consumption
-  ///
-  /// This stream provides efficient queue updates with basic throttling
-  /// to prevent excessive rebuilds during rapid queue modifications.
   Stream<List<MediaItem>> get queueStream =>
       queue.throttleTime(const Duration(milliseconds: 100));
 
@@ -136,8 +141,12 @@ class MusifyAudioHandler extends BaseAudioHandler {
         .listen(
           (event) {
             _handlePlaybackEvent(event);
-            // Playback events need immediate state updates (not debounced)
             _updatePlaybackState();
+            // Update widget on significant playback events
+            if (event.processingState == ProcessingState.ready ||
+                event.processingState == ProcessingState.completed) {
+              //_updateWidget();
+            }
           },
           onError: (error, stackTrace) {
             logger.log('Playback event stream error', error, stackTrace);
@@ -153,23 +162,25 @@ class MusifyAudioHandler extends BaseAudioHandler {
             if (_currentQueueIndex < _queueList.length && duration != null) {
               _updateCurrentMediaItemWithDuration(duration);
             }
-            // Duration changes don't need immediate playback state updates
           },
           onError: (error, stackTrace) {
             logger.log('Duration stream error', error, stackTrace);
           },
         );
-
+    bool _lastPlayingState = false;
     // Player state stream - handles state changes and errors
     audioPlayer.playerStateStream
         .distinct()
         .throttleTime(const Duration(milliseconds: 100))
         .listen(
           (state) {
+            if (state.playing != _lastPlayingState) {
+              _lastPlayingState = state.playing;
+              _updateWidget();
+            }
             if (state.processingState == ProcessingState.idle &&
                 !state.playing &&
                 _lastError != null) {
-              // Handle errors in background to prevent blocking
               Future.microtask(_handlePlaybackError);
             }
             _debouncedStateUpdate();
@@ -208,13 +219,11 @@ class MusifyAudioHandler extends BaseAudioHandler {
       try {
         if (_currentQueueIndex >= _queueList.length) return;
 
-        // Capture current state to avoid race conditions
         final capturedQueueIndex = _currentQueueIndex;
         final capturedTransitionCounter = _songTransitionCounter;
         final currentSong = _queueList[capturedQueueIndex];
         final currentMediaItem = mapToMediaItem(currentSong);
 
-        // Only update if we're still on the same song and haven't had new transitions
         final currentItem = mediaItem.valueOrNull;
         if (currentItem != null &&
             currentItem.id == currentMediaItem.id &&
@@ -225,7 +234,6 @@ class MusifyAudioHandler extends BaseAudioHandler {
           mediaItem.add(currentMediaItem.copyWith(duration: duration));
         }
 
-        // Update queue with duration info only if we're still on the same song
         if (capturedQueueIndex == _currentQueueIndex &&
             capturedTransitionCounter == _songTransitionCounter) {
           final mediaItems = _queueList.asMap().entries.map((entry) {
@@ -310,9 +318,7 @@ class MusifyAudioHandler extends BaseAudioHandler {
     try {
       if (event.processingState == ProcessingState.completed &&
           !sleepTimerExpired) {
-        // Schedule the completion handler with slight delay
         Future.delayed(const Duration(milliseconds: 100), () {
-          // Double-check sleep timer state before handling completion
           if (!sleepTimerExpired) {
             _handleSongCompletion();
           }
@@ -341,7 +347,6 @@ class MusifyAudioHandler extends BaseAudioHandler {
       return;
     }
 
-    // Try to skip to next song if available
     if (hasNext) {
       Future.delayed(_errorRetryDelay, skipToNext);
     }
@@ -353,18 +358,14 @@ class MusifyAudioHandler extends BaseAudioHandler {
         _addToHistory(_queueList[_currentQueueIndex]);
       }
 
-      // Check if there's a next song in the queue (not considering auto-play here)
       if (_currentQueueIndex < _queueList.length - 1) {
         await skipToNext();
       } else if (repeatNotifier.value == AudioServiceRepeatMode.all &&
           _queueList.isNotEmpty) {
-        // Loop back to start
         await _playFromQueue(0);
       } else if (playNextSongAutomatically.value) {
-        // Try to play auto-recommended song
         await _playNextRecommendedSong();
       }
-      // Otherwise, playback ends naturally
     } catch (e, stackTrace) {
       logger.log('Error handling song completion', e, stackTrace);
     }
@@ -514,6 +515,7 @@ class MusifyAudioHandler extends BaseAudioHandler {
 
       if (!audioPlayer.playing && _queueList.length == 1) {
         await _playFromQueue(0);
+        _updateWidget(); // Update widget when starting playback
       }
     } catch (e, stackTrace) {
       logger.log('Error adding to queue', e, stackTrace);
@@ -532,12 +534,10 @@ class MusifyAudioHandler extends BaseAudioHandler {
             .where((ytid) => !queueYtIds.contains(ytid))
             .toList();
 
-        // Clean up old preloaded songs (keep cache but remove from tracking)
         for (final ytid in oldPreloadedSongs) {
           _preloadedYtIds.remove(ytid);
         }
 
-        // Also clean up any stale preloading entries
         final stalePrelodingEntries = _preloadingYtIds
             .where((ytid) => !queueYtIds.contains(ytid))
             .toList();
@@ -653,6 +653,7 @@ class MusifyAudioHandler extends BaseAudioHandler {
       _currentQueueIndex = 0;
       _resetPreloadingState();
       _updateQueueMediaItems();
+      _updateWidget(); // Update widget when queue is cleared
     } catch (e, stackTrace) {
       logger.log('Error clearing queue', e, stackTrace);
     }
@@ -683,36 +684,30 @@ class MusifyAudioHandler extends BaseAudioHandler {
 
   Future<void> _playFromQueue(int index) async {
     try {
-      if (index < 0 || index >= _queueList.length) {
-        logger.log('Invalid queue index: $index', null, null);
-        return;
-      }
+      logger.log('🎯 _playFromQueue called with index: $index', null, null);
 
-      // If a song is already loading and it's the same index, skip
-      if (_isLoadingNextSong && _currentQueueIndex == index) {
-        logger.log(
-          'Song already loading, skipping request for index: $index',
-          null,
-          null,
-        );
+      if (index < 0 || index >= _queueList.length) {
+        logger.log('❌ Invalid queue index: $index', null, null);
         return;
       }
 
       _isLoadingNextSong = true;
-
-      // Save old index for recovery in case of failure
       final previousQueueIndex = _currentQueueIndex;
       _currentQueueIndex = index;
       _songTransitionCounter++;
 
       final currentSong = _queueList[_currentQueueIndex];
-      final currentMediaItem = mapToMediaItem(currentSong);
+      logger.log(
+        '🎵 Setting current song: ${currentSong['title']}',
+        null,
+        null,
+      );
 
+      final currentMediaItem = mapToMediaItem(currentSong);
       scheduleMicrotask(() {
         mediaItem.add(currentMediaItem);
       });
 
-      // Update queue
       _updateQueueOnly();
 
       final success = await playSong(_queueList[index]);
@@ -720,8 +715,13 @@ class MusifyAudioHandler extends BaseAudioHandler {
       if (success) {
         _consecutiveErrors = 0;
         _preloadUpcomingSongs();
+        _updateWidget(); // This should be called
+        logger.log(
+          '✅ Song started successfully, widget should update',
+          null,
+          null,
+        );
       } else {
-        // Restore previous index on failure
         _currentQueueIndex = previousQueueIndex;
         _handlePlaybackError();
       }
@@ -736,7 +736,6 @@ class MusifyAudioHandler extends BaseAudioHandler {
   void _preloadUpcomingSongs() {
     Future.microtask(() async {
       try {
-        // Get songs to preload (next 2-3 in queue)
         final songsToPreload = <Map>[];
 
         for (var i = 1; i <= _queueLookahead; i++) {
@@ -745,10 +744,6 @@ class MusifyAudioHandler extends BaseAudioHandler {
             final nextSong = _queueList[nextIndex];
             final ytid = nextSong['ytid'];
 
-            // Only preload if:
-            // 1. Song has valid ytid
-            // 2. Not an offline song
-            // 3. Not already preloaded or preloading
             if (ytid != null &&
                 !(nextSong['isOffline'] ?? false) &&
                 !_preloadedYtIds.contains(ytid) &&
@@ -758,7 +753,6 @@ class MusifyAudioHandler extends BaseAudioHandler {
           }
         }
 
-        // Preload songs sequentially with concurrency control
         await _preloadSongsSequentially(songsToPreload);
       } catch (e, stackTrace) {
         logger.log('Error in _preloadUpcomingSongs', e, stackTrace);
@@ -768,7 +762,6 @@ class MusifyAudioHandler extends BaseAudioHandler {
 
   Future<void> _preloadSongsSequentially(List<Map> songsToPreload) async {
     for (final song in songsToPreload) {
-      // Wait for available slot if at capacity
       while (_activePreloadCount >= _maxConcurrentPreloads) {
         await Future.delayed(const Duration(milliseconds: 100));
       }
@@ -778,7 +771,6 @@ class MusifyAudioHandler extends BaseAudioHandler {
         continue;
       }
 
-      // Start preloading this song (don't await - let it run in background)
       _preloadSingleSongControlled(song);
     }
   }
@@ -787,7 +779,6 @@ class MusifyAudioHandler extends BaseAudioHandler {
     final ytid = nextSong['ytid'];
     if (ytid == null) return;
 
-    // Mark as preloading synchronously
     _preloadingYtIds.add(ytid);
 
     Future.microtask(() async {
@@ -802,10 +793,9 @@ class MusifyAudioHandler extends BaseAudioHandler {
       } catch (e) {
         logger.log('Error preloading song $ytid', e, null);
       } finally {
-        // Clean up state
         _preloadingYtIds.remove(ytid);
         _activePreloadCount--;
-        _preloadedYtIds.add(ytid); // Mark as attempted (success or failure)
+        _preloadedYtIds.add(ytid);
       }
     });
   }
@@ -816,11 +806,9 @@ class MusifyAudioHandler extends BaseAudioHandler {
 
     final cacheKey = 'song_${ytid}_${audioQualitySetting.value}_url';
 
-    // Check if already cached
     final cachedUrl = await getData('cache', cacheKey);
     if (cachedUrl != null && cachedUrl.toString().isNotEmpty) return;
 
-    // Fetch and cache the song URL
     final url = await getSong(ytid, nextSong['isLive'] ?? false);
     if (url != null && url.isNotEmpty) {
       await addOrUpdateData('cache', cacheKey, url);
@@ -856,7 +844,10 @@ class MusifyAudioHandler extends BaseAudioHandler {
   @override
   Future<void> play() async {
     try {
+      logger.log('▶️ play() called', null, null);
       await audioPlayer.play();
+      // Update widget immediately after play
+      _updateWidget();
     } catch (e, stackTrace) {
       logger.log('Error in play()', e, stackTrace);
       _lastError = e.toString();
@@ -866,7 +857,10 @@ class MusifyAudioHandler extends BaseAudioHandler {
   @override
   Future<void> pause() async {
     try {
+      logger.log('⏸️ pause() called', null, null);
       await audioPlayer.pause();
+      // Update widget immediately after pause
+      _updateWidget();
     } catch (e, stackTrace) {
       logger.log('Error in pause()', e, stackTrace);
     }
@@ -879,6 +873,7 @@ class MusifyAudioHandler extends BaseAudioHandler {
       _lastError = null;
       _consecutiveErrors = 0;
       _resetPreloadingState();
+      _updateWidget(); // Update widget when playback stops
     } catch (e, stackTrace) {
       logger.log('Error in stop()', e, stackTrace);
     }
@@ -974,7 +969,6 @@ class MusifyAudioHandler extends BaseAudioHandler {
     if (!await file.exists()) {
       logger.log('Offline audio file not found: $audioPath', null, null);
 
-      // Try to find in userOfflineSongs
       final offlineSong = userOfflineSongs.firstWhere(
         (s) => s['ytid'] == song['ytid'],
         orElse: () => <String, dynamic>{},
@@ -988,7 +982,6 @@ class MusifyAudioHandler extends BaseAudioHandler {
         }
       }
 
-      // Fallback to online
       return getSong(song['ytid'], song['isLive'] ?? false);
     }
 
@@ -1007,13 +1000,19 @@ class MusifyAudioHandler extends BaseAudioHandler {
           .timeout(_songTransitionTimeout);
       await Future.delayed(const Duration(milliseconds: 100));
 
-      // Update media item only with duration if available (media item base was set in _playFromQueue)
       if (audioPlayer.duration != null) {
         final currentMediaItem = mapToMediaItem(song);
         mediaItem.add(
           currentMediaItem.copyWith(duration: audioPlayer.duration),
         );
+
+        curSong = song;
       }
+
+      // Ensure widget is updated after song starts playing
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _updateWidget(song);
+      });
 
       await audioPlayer.play();
 
@@ -1035,7 +1034,6 @@ class MusifyAudioHandler extends BaseAudioHandler {
     } catch (e, stackTrace) {
       logger.log('Error setting audio source', e, stackTrace);
 
-      // Try online fallback for offline songs
       if (isOffline) {
         logger.log('Attempting to play online version as fallback', null, null);
         final onlineUrl = await getSong(song['ytid'], song['isLive'] ?? false);
@@ -1058,7 +1056,6 @@ class MusifyAudioHandler extends BaseAudioHandler {
               await audioPlayer.play();
               _updatePlaybackState();
 
-              // Start preloading after successful fallback
               Future.delayed(const Duration(seconds: 2), _preloadUpcomingSongs);
 
               return true;
@@ -1163,43 +1160,50 @@ class MusifyAudioHandler extends BaseAudioHandler {
   @override
   Future<void> skipToNext() async {
     try {
+      logger.log('⏭️ skipToNext() called', null, null);
+
       if (_currentQueueIndex < _queueList.length - 1) {
-        // Next song exists in queue
         await _playFromQueue(_currentQueueIndex + 1);
+        logger.log('✅ Successfully skipped to next song', null, null);
       } else if (repeatNotifier.value == AudioServiceRepeatMode.all &&
           _queueList.isNotEmpty) {
-        // Loop back to start
         await _playFromQueue(0);
+        logger.log('✅ Looped to first song', null, null);
       } else if (playNextSongAutomatically.value && !_isLoadingNextSong) {
-        // Try to play auto-recommended song
         await _playNextRecommendedSong();
+        logger.log('✅ Playing recommended song', null, null);
       } else {
-        logger.log('No next song available', null, null);
+        logger.log('❌ No next song available', null, null);
       }
 
       _cleanupOldPreloadedSongs();
     } catch (e, stackTrace) {
-      logger.log('Error skipping to next song', e, stackTrace);
+      logger.log('💥 Error skipping to next song', e, stackTrace);
     }
   }
 
   @override
   Future<void> skipToPrevious() async {
     try {
+      logger.log('⏮️ skipToPrevious() called', null, null);
+
       if (_currentQueueIndex > 0) {
         await _playFromQueue(_currentQueueIndex - 1);
+        logger.log('✅ Successfully skipped to previous song', null, null);
       } else if (_historyList.isNotEmpty) {
         final lastSong = _historyList.removeLast();
         _queueList.insert(0, lastSong);
-        // Ensure index is valid
         _currentQueueIndex = 0;
         _updateQueueMediaItems();
         await _playFromQueue(0);
+        logger.log('✅ Playing from history', null, null);
+      } else {
+        logger.log('❌ No previous song available', null, null);
       }
 
       _cleanupOldPreloadedSongs();
     } catch (e, stackTrace) {
-      logger.log('Error skipping to previous song', e, stackTrace);
+      logger.log('💥 Error skipping to previous song', e, stackTrace);
     }
   }
 
@@ -1232,7 +1236,6 @@ class MusifyAudioHandler extends BaseAudioHandler {
 
         _queueList.shuffle();
 
-        // Only reorder if current song has a valid ytid
         if (currentYtId != null) {
           final newCurrentIndex = _queueList.indexWhere(
             (song) => song['ytid'] == currentYtId,
@@ -1256,7 +1259,6 @@ class MusifyAudioHandler extends BaseAudioHandler {
             ..clear()
             ..addAll(_originalQueueList);
 
-          // Find current song in original queue, default to 0 if not found or ytid is null
           _currentQueueIndex = currentYtId != null
               ? _queueList.indexWhere((song) => song['ytid'] == currentYtId)
               : 0;
@@ -1377,6 +1379,49 @@ class MusifyAudioHandler extends BaseAudioHandler {
   }
 
   // ============================================================================
+  // Widget Integration
+  // ============================================================================
+
+  /// Updates the Android widget with current playback state
+  /// Updates the Android widget with current playback state
+  void _updateWidget([Map? song]) {
+    try {
+      // Use provided song or current song
+      final currentSong = song ?? this.currentSong ?? curSong;
+
+      final isPlaying = audioPlayer.playing;
+      String title = 'Musify';
+      String artist = 'No song playing';
+
+      if (currentSong != null) {
+        title = currentSong['title']?.toString().trim() ?? 'Unknown Title';
+        artist = currentSong['artist']?.toString().trim() ?? 'Unknown Artist';
+
+        // Log for debugging
+        logger.log(
+          '📀 Preparing widget update - Title: "$title", Artist: "$artist", Playing: $isPlaying',
+          null,
+          null,
+        );
+      } else {
+        logger.log('📀 No current song, using default widget data', null, null);
+      }
+
+      final albumPath = currentSong?['image']?.toString();
+
+      // Update widget with proper error handling
+      updateWidgetFromDart(
+        title: title,
+        artist: artist,
+        isPlaying: isPlaying,
+        albumPath: albumPath,
+      );
+    } catch (e, stackTrace) {
+      logger.log('💥 Error in _updateWidget', e, stackTrace);
+    }
+  }
+
+  // ============================================================================
   // Android Auto Support
   // ============================================================================
 
@@ -1386,32 +1431,26 @@ class MusifyAudioHandler extends BaseAudioHandler {
     Map<String, dynamic>? options,
   ]) async {
     try {
-      // Root level - show main browsable categories
       if (parentMediaId == '__ROOT__') {
         return _buildRootMediaItems();
       }
 
-      // Queue - show current queue
       if (parentMediaId == '__QUEUE__') {
         return queue.value;
       }
 
-      // Liked Songs
       if (parentMediaId == '__LIKED_SONGS__') {
         return _buildLikedSongsMediaItems();
       }
 
-      // User Playlists (from YouTube/external)
       if (parentMediaId == '__USER_PLAYLISTS__') {
         return _buildUserPlaylistsMediaItems();
       }
 
-      // Custom Playlists (user created)
       if (parentMediaId == '__CUSTOM_PLAYLISTS__') {
         return _buildCustomPlaylistsMediaItems();
       }
 
-      // Individual playlist - show songs in the playlist
       if (parentMediaId.startsWith('playlist:')) {
         final playlistId = parentMediaId.substring('playlist:'.length);
         return await _buildPlaylistSongsMediaItems(playlistId);
@@ -1424,18 +1463,15 @@ class MusifyAudioHandler extends BaseAudioHandler {
     }
   }
 
-  /// Builds the root-level browsable categories
   List<MediaItem> _buildRootMediaItems() {
     final items = <MediaItem>[];
 
-    // Current Queue
     if (queue.value.isNotEmpty) {
       items.add(
         const MediaItem(id: '__QUEUE__', title: 'Queue', playable: false),
       );
     }
 
-    // Liked Songs
     if (userLikedSongsList.isNotEmpty) {
       items.add(
         const MediaItem(
@@ -1446,7 +1482,6 @@ class MusifyAudioHandler extends BaseAudioHandler {
       );
     }
 
-    // User Playlists
     if (userPlaylists.value.isNotEmpty) {
       items.add(
         const MediaItem(
@@ -1457,7 +1492,6 @@ class MusifyAudioHandler extends BaseAudioHandler {
       );
     }
 
-    // Custom Playlists
     if (userCustomPlaylists.value.isNotEmpty) {
       items.add(
         const MediaItem(
@@ -1471,14 +1505,12 @@ class MusifyAudioHandler extends BaseAudioHandler {
     return items;
   }
 
-  /// Builds MediaItems for liked songs
   List<MediaItem> _buildLikedSongsMediaItems() {
     return userLikedSongsList
         .map((song) => mapToMediaItem(song as Map))
         .toList();
   }
 
-  /// Builds browsable MediaItems for user playlists
   List<MediaItem> _buildUserPlaylistsMediaItems() {
     return userPlaylists.value.map<MediaItem>((playlist) {
       final playlistMap = playlist as Map;
@@ -1493,7 +1525,6 @@ class MusifyAudioHandler extends BaseAudioHandler {
     }).toList();
   }
 
-  /// Builds browsable MediaItems for custom playlists
   List<MediaItem> _buildCustomPlaylistsMediaItems() {
     return userCustomPlaylists.value.map<MediaItem>((playlist) {
       final playlistMap = playlist as Map;
@@ -1508,12 +1539,10 @@ class MusifyAudioHandler extends BaseAudioHandler {
     }).toList();
   }
 
-  /// Builds MediaItems for songs in a specific playlist
   Future<List<MediaItem>> _buildPlaylistSongsMediaItems(
     String playlistId,
   ) async {
     try {
-      // Handle custom playlists
       if (playlistId.startsWith('custom:')) {
         final playlistTitle = playlistId.substring('custom:'.length);
         final playlist = userCustomPlaylists.value.firstWhere(
@@ -1526,7 +1555,6 @@ class MusifyAudioHandler extends BaseAudioHandler {
           return songs.map((song) => mapToMediaItem(song as Map)).toList();
         }
       } else {
-        // Handle regular playlists
         final playlist = userPlaylists.value.firstWhere(
           (p) => (p as Map)['ytid'] == playlistId,
           orElse: () => <String, dynamic>{},
@@ -1545,3 +1573,325 @@ class MusifyAudioHandler extends BaseAudioHandler {
     }
   }
 }
+
+bool _isChannelInitialized = false;
+bool _isChannelTesting = false;
+Timer? _channelRetryTimer;
+Timer? _initTimer;
+
+void initializeWidgetChannel() {
+  logger.log('🎯 Initializing widget channel...', null, null);
+
+  platform.setMethodCallHandler((call) async {
+    logger.log('📞 Method received: ${call.method}', null, null);
+
+    try {
+      switch (call.method) {
+        case 'testConnection':
+          logger.log('✅ Channel connection confirmed', null, null);
+          return 'Dart connected';
+        case 'togglePlay':
+          logger.log('⏯️ Toggle play from widget', null, null);
+          final playing = audioHandler.playbackState.value.playing;
+          if (playing) {
+            await audioHandler.pause();
+            logger.log('⏸️ Paused from widget', null, null);
+          } else {
+            await audioHandler.play();
+            logger.log('▶️ Playing from widget', null, null);
+          }
+          break;
+        case 'next':
+          logger.log('⏭️ Next from widget', null, null);
+          if (audioHandler.hasNext) {
+            await audioHandler.skipToNext();
+            logger.log('✅ Skipped to next from widget', null, null);
+          } else {
+            logger.log('❌ No next song available', null, null);
+          }
+          break;
+        case 'prev':
+          logger.log('⏮️ Previous from widget', null, null);
+          if (audioHandler.hasPrevious) {
+            await audioHandler.skipToPrevious();
+            logger.log('✅ Skipped to previous from widget', null, null);
+          } else {
+            logger.log('❌ No previous song available', null, null);
+          }
+          break;
+        case 'updateWidget':
+          logger.log('📱 Update widget from native', null, null);
+          break;
+        default:
+          logger.log('❌ Unknown method: ${call.method}', null, null);
+      }
+    } catch (e, stackTrace) {
+      logger.log(
+        '💥 Error handling widget method ${call.method}',
+        e,
+        stackTrace,
+      );
+    }
+  });
+
+  Future.delayed(const Duration(seconds: 10), () {
+    testChannelConnection();
+  });
+}
+
+Future<void> testChannelConnection() async {
+  // Don't test if we're already initialized
+  if (_isChannelInitialized) return;
+
+  try {
+    logger.log('🧪 Testing channel connection...', null, null);
+    final result = await platform
+        .invokeMethod('testConnection')
+        .timeout(const Duration(seconds: 2), onTimeout: () => 'timeout');
+
+    if (result != 'timeout') {
+      _isChannelInitialized = true;
+      logger.log('✅ Channel test SUCCESS: $result', null, null);
+    }
+  } catch (e) {
+    // Silently fail - don't log errors that spam the console
+    // logger.log('Channel test failed silently', null, null);
+  }
+}
+
+void _scheduleChannelRetry() {
+  _channelRetryTimer?.cancel();
+  _channelRetryTimer = Timer(const Duration(seconds: 10), () {
+    logger.log('🔄 Retrying channel connection...', null, null);
+    testChannelConnection();
+  });
+}
+
+Future<void> updateWidgetFromDart({
+  required String title,
+  required String artist,
+  required bool isPlaying,
+  String? albumPath,
+}) async {
+  try {
+    if (!_isChannelInitialized) {
+      return;
+    }
+
+    logger.log(
+      '📱 Sending widget update: "$title" - "$artist", playing: $isPlaying',
+      null,
+      null,
+    );
+
+    await platform.invokeMethod('updateWidget', {
+      'title': title,
+      'artist': artist,
+      'isPlaying': isPlaying,
+      if (albumPath != null) 'albumPath': albumPath,
+    });
+
+    logger.log('✅ Widget update successful', null, null);
+  } on PlatformException catch (e) {
+    logger.log('❌ Platform error updating widget: ${e.message}', null, null);
+  } catch (e, stackTrace) {
+    logger.log('💥 Unexpected error updating widget', e, stackTrace);
+    // Silently fail - don't log errors
+    _isChannelInitialized = false;
+  }
+}
+
+void _tryChannelConnection() {
+  _initTimer?.cancel();
+
+  _initTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+    if (_isChannelInitialized) {
+      timer.cancel();
+      logger.log('✅ Channel is now initialized', null, null);
+      return;
+    }
+
+    try {
+      logger.log('🔄 Attempting channel connection...', null, null);
+      final result = await platform
+          .invokeMethod('testConnection')
+          .timeout(const Duration(seconds: 2));
+
+      _isChannelInitialized = true;
+      timer.cancel();
+      logger.log('✅ Channel connection successful: $result', null, null);
+    } catch (e) {
+      logger.log('⏳ Channel not ready yet, retrying...', null, null);
+    }
+  });
+}
+
+void testWidgetUpdate() {
+  updateWidgetFromDart(
+    title: 'Test Song',
+    artist: 'Test Artist',
+    isPlaying: true,
+    albumPath: null,
+  );
+}
+
+void testWidgetButtons() {
+  logger.log('🧪 Testing widget buttons functionality...', null, null);
+
+  // Test if audio handler is ready
+  logger.log('🎵 Audio Handler State:', null, null);
+  logger.log('   - Has Next: ${audioHandler.hasNext}', null, null);
+  logger.log('   - Has Previous: ${audioHandler.hasPrevious}', null, null);
+  logger.log(
+    '   - Is Playing: ${audioHandler.playbackState.value.playing}',
+    null,
+    null,
+  );
+  logger.log(
+    '   - Queue Length: ${audioHandler.currentQueue.length}',
+    null,
+    null,
+  );
+
+  // Test channel connection
+  testChannelConnection();
+
+  // Test widget update
+  updateWidgetFromDart(
+    title: 'Test Song',
+    artist: 'Test Artist',
+    isPlaying: true,
+    albumPath: null,
+  );
+}
+
+// void _startChannelHealthCheck() {
+//   // Check channel health every 30 seconds
+//   Timer.periodic(const Duration(seconds: 30), (timer) {
+//     if (!_isChannelInitialized && !_isChannelTesting) {
+//       logger.log('🩺 Channel health check - reconnecting...', null, null);
+//       testChannelConnection();
+//     }
+//   });
+// }
+
+void testSimpleChannel() async {
+  logger.log('🧪 TEST: Testing simple channel connection...', null, null);
+  try {
+    final result = await platform
+        .invokeMethod('testConnection')
+        .timeout(const Duration(seconds: 5));
+    logger.log('✅ TEST SUCCESS: $result', null, null);
+  } catch (e) {
+    logger.log('❌ TEST FAILED: $e', null, null);
+
+    // Try alternative channel names
+    await testAlternativeChannels();
+  }
+}
+
+Future<void> testAlternativeChannels() async {
+  logger.log('🔄 Trying alternative channel configurations...', null, null);
+
+  final alternativeChannels = [
+    'com.gokadzev.musify/widget',
+    'com.gokadzev.musify/widget_channel',
+    'com.gokadzev.musify/musify_widget',
+    'widget_channel',
+  ];
+
+  for (final channelName in alternativeChannels) {
+    try {
+      logger.log('🔄 Testing channel: $channelName', null, null);
+      final testChannel = MethodChannel(channelName);
+      final result = await testChannel
+          .invokeMethod('testConnection')
+          .timeout(const Duration(seconds: 2));
+      logger.log('✅ Channel $channelName WORKED: $result', null, null);
+      return;
+    } catch (e) {
+      logger.log('❌ Channel $channelName failed: $e', null, null);
+    }
+  }
+
+  logger.log('💥 All channel tests failed', null, null);
+}
+
+void testWidgetFunctionality() {
+  logger.log('🧪 Testing full widget functionality...', null, null);
+
+  // Test 1: Update widget with current song
+  if (audioHandler.currentSong != null) {
+    updateWidgetFromDart(
+      title: audioHandler.currentSong!['title']?.toString() ?? 'Unknown',
+      artist: audioHandler.currentSong!['artist']?.toString() ?? 'Unknown',
+      isPlaying: audioHandler.playbackState.value.playing,
+      albumPath: audioHandler.currentSong!['image']?.toString(),
+    );
+  }
+
+  // Test 2: Test media controls
+  logger.log('🎵 Current audio state:', null, null);
+  logger.log('   - Has Next: ${audioHandler.hasNext}', null, null);
+  logger.log('   - Has Previous: ${audioHandler.hasPrevious}', null, null);
+  logger.log(
+    '   - Is Playing: ${audioHandler.playbackState.value.playing}',
+    null,
+    null,
+  );
+  logger.log(
+    '   - Queue Length: ${audioHandler.currentQueue.length}',
+    null,
+    null,
+  );
+}
+
+void debugActivityTiming() {
+  logger.log('🔍 DEBUGGING ACTIVITY TIMING', null, null);
+  logger.log('   Current time: ${DateTime.now()}', null, null);
+
+  // Test multiple times with increasing delays
+  for (int i = 1; i <= 10; i++) {
+    Future.delayed(Duration(seconds: i), () {
+      logger.log('   Attempt $i at ${DateTime.now()}', null, null);
+      testChannelConnection();
+    });
+  }
+}
+// MethodChannel getPlatformChannel() {
+//   // This will be set from the native side, but for now we'll try multiple
+//   return MethodChannel('com.gokadzev.musify/widget');
+// }
+
+// Future<MethodChannel?> findWorkingChannel() async {
+//   final possibleChannels = [
+//     'com.gokadzev.musify/widget', // github flavor
+//     'com.gokadzev.musify.fdroid/widget', // fdroid flavor
+//     'com.gokadzev.musify.debug/widget', // debug build
+//   ];
+
+//   for (final channelName in possibleChannels) {
+//     try {
+//       final channel = MethodChannel(channelName);
+//       logger.log('🔄 Testing channel: $channelName', null, null);
+//       final result = await channel
+//           .invokeMethod('testConnection')
+//           .timeout(const Duration(seconds: 2));
+//       logger.log('✅ Found working channel: $channelName', null, null);
+//       return channel;
+//     } catch (e) {
+//       logger.log('❌ Channel $channelName failed: $e', null, null);
+//     }
+//   }
+
+//   logger.log('💥 No working channel found', null, null);
+//   return null;
+// }
+
+// MethodChannel? _platform;
+// MethodChannel get platform {
+//   if (_platform == null) {
+//     _platform = getPlatformChannel();
+//   }
+//   return _platform!;
+// }
