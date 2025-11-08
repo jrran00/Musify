@@ -43,6 +43,7 @@ class SongBar extends StatefulWidget {
     this.isRecentSong,
     this.onRemove,
     this.borderRadius = BorderRadius.zero,
+    this.showDragHandle = false, // Default to false
     super.key,
   });
 
@@ -55,6 +56,9 @@ class SongBar extends StatefulWidget {
   final bool? isRecentSong;
   final bool showMusicDuration;
   final BorderRadius borderRadius;
+
+  // In SongBar widget constructor, add:
+  final bool showDragHandle; // Changed to non-nullable with default
 
   @override
   State<SongBar> createState() => _SongBarState();
@@ -117,6 +121,17 @@ class _SongBarState extends State<SongBar> {
             padding: commonBarContentPadding,
             child: Row(
               children: [
+                if (widget.showDragHandle)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: Icon(
+                      FluentIcons.re_order_24_filled,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurfaceVariant.withOpacity(0.6),
+                      size: 20,
+                    ),
+                  ),
                 _buildAlbumArt(primaryColor),
                 const SizedBox(width: 8),
                 Expanded(
