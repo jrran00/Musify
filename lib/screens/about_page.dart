@@ -92,6 +92,48 @@ class AboutPage extends StatelessWidget {
                 ),
               ),
             ),
+            const SizedBox(height: 10),
+            Card(
+              child: ListTile(
+                contentPadding: const EdgeInsets.all(8),
+                leading: Container(
+                  height: 50,
+                  width: 50,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  child: const Icon(
+                    FluentIcons.person_24_filled,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                title: const Text(
+                  'Jamil Jusoh',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: const Text('SOFTWARE ENGINEER'),
+                trailing: Wrap(
+                  children: <Widget>[
+                    IconButton(
+                      icon: const Icon(FluentIcons.code_24_filled),
+                      tooltip: 'Github',
+                      onPressed: () {
+                        launchURL(Uri.parse('https://github.com/jrran00'));
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(FluentIcons.globe_24_filled),
+                      tooltip: 'Website',
+                      onPressed: () {
+                        launchURL(Uri.parse('https://github.com/jrran00'));
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),

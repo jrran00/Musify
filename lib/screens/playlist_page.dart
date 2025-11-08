@@ -521,8 +521,17 @@ class _PlaylistPageState extends State<PlaylistPage> {
 
   void _handleSyncPlaylist() async {
     if (_playlist['ytid'] != null) {
-      _playlist = await updatePlaylistList(context, _playlist['ytid']);
-      _pagingController.refresh();
+      final updatedPlaylist = await updatePlaylistList(
+        context,
+        _playlist['ytid'],
+      );
+      if (updatedPlaylist != null) {
+        _playlist = updatedPlaylist;
+        _pagingController.refresh();
+      } else {
+        // Handle the case where playlist wasn't found
+        showToast(context, 'Playlist not found in library');
+      }
     } else {
       final updatedPlaylist = await getPlaylistInfoForWidget(widget.playlistId);
       if (updatedPlaylist != null && mounted) {
@@ -656,7 +665,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
       addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value);
 
       // Show feedback to user
-      showToast(context, 'Playlist order updated');
+      //showToast(context, 'Playlist order updated');
     }
   }
 
@@ -672,46 +681,64 @@ class _PlaylistPageState extends State<PlaylistPage> {
     }
   }
 
+  String _generateStableKey(dynamic song, int index) {
+    final ytid = song['ytid']?.toString() ?? '';
+    final title = song['title']?.toString() ?? '';
+    final artist = song['artist']?.toString() ?? '';
+
+    // If we have a YouTube ID, use it as the primary identifier
+    if (ytid.isNotEmpty) {
+      return 'song_$ytid';
+    }
+
+    // Fallback: create a hash from title and artist
+    final fallbackId = '${title}_${artist}'.hashCode.toString();
+    return 'song_${fallbackId}_$index';
+  }
+
   Widget _buildReorderableSongList() {
-    // Get items directly from the playlist since we're already loading everything
     final items = _playlist['list'] as List<dynamic>;
 
-    return SliverReorderableList(
-      itemCount: items.length,
-      onReorder: _handleSongReorder,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        final isRemovable = _playlist['source'] == 'user-created';
-        final totalItems = items.length;
-        final borderRadius = getItemBorderRadius(index, totalItems);
+    return SliverToBoxAdapter(
+      child: ReorderableListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: items.length,
+        onReorder: _handleSongReorder,
+        itemBuilder: (context, index) {
+          final item = items[index];
+          final isRemovable = _playlist['source'] == 'user-created';
+          final totalItems = items.length;
+          final borderRadius = getItemBorderRadius(index, totalItems);
 
-        return ReorderableDragStartListener(
-          key: ValueKey('${item['id']}_$index'),
-          index: index,
-          child: SongBar(
-            item,
-            true,
-            onRemove: isRemovable
-                ? () => {
-                    if (removeSongFromPlaylist(
-                      _playlist,
-                      item,
-                      removeOneAtIndex: index,
-                    ))
-                      {_updateSongsListOnRemove(index)},
-                  }
-                : null,
-            onPlay: () => {
-              audioHandler.playPlaylistSong(
-                playlist: _playlist,
-                songIndex: index,
-              ),
-            },
-            borderRadius: borderRadius,
-            showDragHandle: true,
-          ),
-        );
-      },
+          return ReorderableDragStartListener(
+            key: ValueKey(_generateStableKey(item, index)),
+            index: index,
+            child: SongBar(
+              item,
+              true,
+              onRemove: isRemovable
+                  ? () => {
+                      if (removeSongFromPlaylist(
+                        _playlist,
+                        item,
+                        removeOneAtIndex: index,
+                      ))
+                        {_updateSongsListOnRemove(index)},
+                    }
+                  : null,
+              onPlay: () => {
+                audioHandler.playPlaylistSong(
+                  playlist: _playlist,
+                  songIndex: index,
+                ),
+              },
+              borderRadius: borderRadius,
+              showDragHandle: true,
+            ),
+          );
+        },
+      ),
     );
   }
 

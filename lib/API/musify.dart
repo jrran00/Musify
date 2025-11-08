@@ -256,26 +256,47 @@ String addSongInCustomPlaylist(
   Map song, {
   int? indexToInsert,
 }) {
-  final customPlaylist = userCustomPlaylists.value.firstWhere(
-    (playlist) => playlist['title'] == playlistName,
-    orElse: () => null,
-  );
+  try {
+    // Use indexWhere instead of firstWhere to avoid the orElse type issue
+    final playlistIndex = userCustomPlaylists.value.indexWhere(
+      (playlist) => playlist['title'] == playlistName,
+    );
 
-  if (customPlaylist != null) {
+    if (playlistIndex == -1) {
+      return 'Playlist not found'; // Hardcoded string
+    }
+
+    final customPlaylist = userCustomPlaylists.value[playlistIndex];
     final List<dynamic> playlistSongs = customPlaylist['list'];
+
+    // Check if song already exists in playlist
     if (playlistSongs.any(
       (playlistElement) => playlistElement['ytid'] == song['ytid'],
     )) {
-      return context.l10n!.songAlreadyInPlaylist;
+      return 'Song is already in playlist'; // Hardcoded string
     }
-    indexToInsert != null
-        ? playlistSongs.insert(indexToInsert, song)
-        : playlistSongs.add(song);
+
+    // Add the song to the playlist
+    if (indexToInsert != null) {
+      playlistSongs.insert(indexToInsert, song);
+    } else {
+      playlistSongs.add(song);
+    }
+
+    // Update the playlist in the list
+    final updatedPlaylists = List<Map>.from(userCustomPlaylists.value);
+    updatedPlaylists[playlistIndex] = customPlaylist;
+    userCustomPlaylists.value = updatedPlaylists;
+
     addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value);
-    return context.l10n!.songAdded;
-  } else {
-    logger.log('Custom playlist not found: $playlistName', null, null);
-    return context.l10n!.error;
+    return 'Song added'; // Hardcoded string
+  } catch (e, stackTrace) {
+    logger.log(
+      'Error in addSongInCustomPlaylist for playlist: $playlistName',
+      e,
+      stackTrace,
+    );
+    return 'Error'; // Hardcoded string
   }
 }
 
@@ -820,8 +841,46 @@ Future<List> getSongsFromPlaylist(
 }
 
 Future updatePlaylistList(BuildContext context, String playlistId) async {
+  // Check if it's a user-created playlist first
+  if (playlistId.startsWith('customId-')) {
+    showToast(context, 'Cannot sync user-created playlists');
+    return null;
+  }
+
   final index = findPlaylistIndexByYtId(playlistId);
-  if (index != -1) {
+  if (index == -1) {
+    // Playlist not found in main list, try to create a new entry
+    try {
+      final songList = [];
+      await for (final song in _yt.playlists.getVideos(playlistId)) {
+        songList.add(returnSongLayout(songList.length, song));
+      }
+
+      // Get playlist info to create proper entry
+      final playlistInfo = await _yt.playlists.get(playlistId);
+      final newPlaylist = {
+        'ytid': playlistId,
+        'title': playlistInfo.title,
+        'image': null,
+        'source': 'user-youtube',
+        'list': songList,
+      };
+
+      playlists.add(newPlaylist);
+      await addOrUpdateData('cache', 'playlistSongs$playlistId', songList);
+      showToast(context, 'Playlist synced and added');
+      return newPlaylist;
+    } catch (e, stackTrace) {
+      logger.log(
+        'Error creating playlist entry for $playlistId',
+        e,
+        stackTrace,
+      );
+      showToast(context, 'Error syncing playlist');
+      return null;
+    }
+  } else {
+    // Update existing playlist
     final songList = [];
     await for (final song in _yt.playlists.getVideos(playlistId)) {
       songList.add(returnSongLayout(songList.length, song));
@@ -829,9 +888,9 @@ Future updatePlaylistList(BuildContext context, String playlistId) async {
 
     playlists[index]['list'] = songList;
     await addOrUpdateData('cache', 'playlistSongs$playlistId', songList);
-    showToast(context, context.l10n!.playlistUpdated);
+    showToast(context, 'Playlist updated');
+    return playlists[index];
   }
-  return playlists[index];
 }
 
 int findPlaylistIndexByYtId(String ytid) {
