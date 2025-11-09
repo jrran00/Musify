@@ -67,16 +67,15 @@ class PlaylistPage extends StatefulWidget {
 class _PlaylistPageState extends State<PlaylistPage> {
   dynamic _playlist;
   late final List<dynamic> _originalPlaylistList;
-  final int _itemsPerPage = 35;
-  late final PagingController<int, dynamic> _pagingController;
+  late final ScrollController _scrollController;
 
-  // Store the current display order separately
-  List<dynamic> _currentDisplayList = [];
-
+  // Add these missing variables:
   late final playlistLikeStatus = ValueNotifier<bool>(
     isPlaylistAlreadyLiked(widget.playlistId),
   );
   bool playlistOfflineStatus = false;
+  final int _itemsPerPage = 35; // Add this back
+  List<dynamic> _currentDisplayList = []; // Add this
 
   // Sorting state
   late PlaylistSortType _sortType = PlaylistSortType.values.firstWhere(
@@ -88,24 +87,13 @@ class _PlaylistPageState extends State<PlaylistPage> {
   @override
   void initState() {
     super.initState();
-
-    _pagingController = PagingController<int, dynamic>(
-      getNextPageKey: (state) {
-        if (_currentDisplayList.isEmpty) return null;
-        final totalCount = _currentDisplayList.length;
-        final currentlyLoaded = state.items?.length ?? 0;
-        if (currentlyLoaded >= totalCount) return null;
-        return currentlyLoaded;
-      },
-      fetchPage: _fetchPage,
-    );
-
+    _scrollController = ScrollController();
     _initializePlaylist();
   }
 
   @override
   void dispose() {
-    _pagingController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -132,7 +120,9 @@ class _PlaylistPageState extends State<PlaylistPage> {
 
       if (_playlist != null && _playlist['list'] != null) {
         _originalPlaylistList = List<dynamic>.from(_playlist['list'] as List);
-        _currentDisplayList = List<dynamic>.from(_originalPlaylistList);
+        _currentDisplayList = List<dynamic>.from(
+          _originalPlaylistList,
+        ); // Add this
 
         // Apply initial sort
         _applySort(_sortType);
@@ -148,22 +138,8 @@ class _PlaylistPageState extends State<PlaylistPage> {
     }
   }
 
-  Future<List<dynamic>> _fetchPage(int pageKey) async {
-    try {
-      if (_currentDisplayList.isEmpty) return [];
-      final startIndex = pageKey;
-      final endIndex = min(
-        startIndex + _itemsPerPage,
-        _currentDisplayList.length,
-      );
-      return _currentDisplayList.sublist(startIndex, endIndex);
-    } catch (error) {
-      rethrow;
-    }
-  }
-
   void _applySort(PlaylistSortType type) {
-    if (_originalPlaylistList.isEmpty) return;
+    if (_playlist == null || _playlist['list'] == null) return;
 
     List<dynamic> sortedList;
 
@@ -185,10 +161,9 @@ class _PlaylistPageState extends State<PlaylistPage> {
         break;
     }
 
-    _currentDisplayList = sortedList;
-    _playlist['list'] =
-        sortedList; // Also update the playlist for other methods
-    _pagingController.refresh();
+    // Directly update the playlist list (like UserSongsPage does)
+    _playlist['list'] = sortedList;
+    setState(() {});
   }
 
   @override
@@ -204,9 +179,10 @@ class _PlaylistPageState extends State<PlaylistPage> {
           // Add simple enable/disable sort button
           _buildSortToggleButton(),
           const SizedBox(width: 10),
-
-          if (widget.playlistId != null) ...[_buildLikeButton()],
-          const SizedBox(width: 10),
+          if (_playlist['source'] != 'user-created') ...[
+            if (widget.playlistId != null) ...[_buildLikeButton()],
+            const SizedBox(width: 10),
+          ],
           if (_playlist != null) ...[
             _buildSyncButton(),
             const SizedBox(width: 10),
@@ -233,39 +209,35 @@ class _PlaylistPageState extends State<PlaylistPage> {
         ],
       ),
       body: _playlist != null
-          ? PagingListener(
-              controller: _pagingController,
-              builder: (context, state, fetchNextPage) => CustomScrollView(
-                //controller: _scrollController, // Add this
-                slivers: [
+          ? CustomScrollView(
+              controller: _scrollController,
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: buildPlaylistHeader(),
+                  ),
+                ),
+                if (_playlist['list'].isNotEmpty) ...[
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: buildPlaylistHeader(),
-                    ),
-                  ),
-                  // Keep the sort type button in the body
-                  if (_playlist['list'].isNotEmpty) ...[
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.only(
-                          top: 15,
-                          bottom: 20,
-                          right: 20,
-                        ),
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: _buildSortTypeButton(),
-                        ),
+                      padding: const EdgeInsets.only(
+                        top: 15,
+                        bottom: 20,
+                        right: 20,
+                      ),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: _buildSortTypeButton(),
                       ),
                     ),
-                  ],
-                  SliverPadding(
-                    padding: commonListViewBottmomPadding,
-                    sliver: _buildSongList(),
                   ),
                 ],
-              ),
+                SliverPadding(
+                  padding: commonListViewBottmomPadding,
+                  sliver: _buildSongList(),
+                ),
+              ],
             )
           : SizedBox(
               height: MediaQuery.sizeOf(context).height - 100,
@@ -575,7 +547,15 @@ class _PlaylistPageState extends State<PlaylistPage> {
   }
 
   void _updateSongsListOnRemove(int indexOfRemovedSong) {
-    final items = _pagingController.items ?? [];
+    final double? currentScrollPosition = _scrollController.hasClients
+        ? _scrollController.position.pixels
+        : null;
+
+    // Remove this line - we don't have pagingController anymore
+    // final items = _pagingController.items ?? [];
+
+    // Use the current display list instead
+    final items = _playlist['list'] as List<dynamic>;
     if (indexOfRemovedSong >= items.length) return;
 
     final dynamic songToRemove = items[indexOfRemovedSong];
@@ -595,6 +575,12 @@ class _PlaylistPageState extends State<PlaylistPage> {
     );
 
     setState(() {});
+
+    if (currentScrollPosition != null && _scrollController.hasClients) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollController.jumpTo(currentScrollPosition);
+      });
+    }
   }
 
   String _getSortTypeDisplayText(PlaylistSortType type) {
@@ -608,46 +594,6 @@ class _PlaylistPageState extends State<PlaylistPage> {
       case PlaylistSortType.random:
         return context.l10n!.random;
     }
-  }
-
-  Widget _buildSortSongActionButton() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Enable/Disable sorting button on the left
-        IconButton(
-          icon: Icon(
-            _sortingEnabled
-                ? FluentIcons.arrow_sort_24_filled
-                : FluentIcons.arrow_sort_24_regular,
-          ),
-          onPressed: () {
-            setState(() {
-              _sortingEnabled = !_sortingEnabled;
-            });
-
-            // If disabling sorting, restore to default order
-            if (!_sortingEnabled) {
-              _sortPlaylist(PlaylistSortType.default_);
-              _pagingController.refresh();
-            }
-          },
-          tooltip: _sortingEnabled ? 'Disable Sorting' : 'Enable Sorting',
-        ),
-        const SizedBox(width: 8),
-
-        // Existing sort button on the right
-        SortButton<PlaylistSortType>(
-          currentSortType: _sortType,
-          sortTypes: PlaylistSortType.values,
-          sortTypeToString: _getSortTypeDisplayText,
-          allowReselect: (type) => type == PlaylistSortType.random,
-          onSelected: _sortingEnabled
-              ? _handleSortTypeSelected
-              : _handleDisabledSort,
-        ),
-      ],
-    );
   }
 
   // Add this separate method to handle sort type selection
@@ -667,35 +613,6 @@ class _PlaylistPageState extends State<PlaylistPage> {
     // Option 2: Show a toast message (uncomment if you want this)
     // showToast(context, context.l10n!.sortingDisabled);
   }
-  void _sortPlaylist(PlaylistSortType type) {
-    if (_playlist == null || _playlist['list'] == null) return;
-
-    List<dynamic> sortedList;
-
-    switch (type) {
-      case PlaylistSortType.default_:
-        // For default, use the current order (could be modified by drag-drop)
-        sortedList = List<dynamic>.from(_playlist['list']);
-        break;
-      case PlaylistSortType.title:
-        // For title sort, sort from whatever is currently displayed
-        sortedList = List<dynamic>.from(_playlist['list']);
-        sortSongsByKey(sortedList, 'title');
-        break;
-      case PlaylistSortType.artist:
-        // For artist sort, sort from whatever is currently displayed
-        sortedList = List<dynamic>.from(_playlist['list']);
-        sortSongsByKey(sortedList, 'artist');
-        break;
-      case PlaylistSortType.random:
-        // For random sort, shuffle whatever is currently displayed
-        sortedList = List<dynamic>.from(_playlist['list']);
-        shufflePlaylistRandomly(sortedList);
-        break;
-    }
-
-    _playlist['list'] = sortedList;
-  }
 
   // void _saveScrollPosition() {
   //   if (_scrollController.hasClients) {
@@ -710,32 +627,6 @@ class _PlaylistPageState extends State<PlaylistPage> {
   //     });
   //   }
   // }
-
-  Widget _buildSongListItem(dynamic song, int index, bool isRemovable) {
-    final items = _pagingController.items ?? [];
-    final totalItems = items.length;
-    final borderRadius = getItemBorderRadius(index, totalItems);
-
-    return SongBar(
-      song,
-      true,
-      onRemove: isRemovable
-          ? () => {
-              if (removeSongFromPlaylist(
-                _playlist,
-                song,
-                removeOneAtIndex: index,
-              ))
-                {_updateSongsListOnRemove(index)},
-            }
-          : null,
-      onPlay: () => {
-        audioHandler.playPlaylistSong(playlist: _playlist, songIndex: index),
-      },
-      borderRadius: borderRadius,
-      showDragHandle: false, // No drag handle for standard list
-    );
-  }
 
   // Add this missing method
   void _saveCustomPlaylistOrder() {
@@ -780,62 +671,81 @@ class _PlaylistPageState extends State<PlaylistPage> {
   }
 
   Widget _buildReorderableSongList() {
-    return SliverToBoxAdapter(
-      child: ReorderableListView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: _currentDisplayList.length,
-        onReorder: _handleSongReorder,
-        itemBuilder: (context, index) {
-          final item = _currentDisplayList[index];
-          final isRemovable = _playlist['source'] == 'user-created';
-          final totalItems = _currentDisplayList.length;
-          final borderRadius = getItemBorderRadius(index, totalItems);
+    final songsList = _playlist['list'] as List<dynamic>;
 
-          return ReorderableDragStartListener(
-            key: ValueKey(_generateStableKey(item, index)),
-            index: index,
-            child: SongBar(
-              item,
-              true,
-              onRemove: isRemovable
-                  ? () => {
-                      if (removeSongFromPlaylist(
-                        _playlist,
-                        item,
-                        removeOneAtIndex: index,
-                      ))
-                        {_updateSongsListOnRemove(index)},
-                    }
-                  : null,
-              onPlay: () => {
-                audioHandler.playPlaylistSong(
-                  playlist: _playlist,
-                  songIndex: index,
-                ),
-              },
-              borderRadius: borderRadius,
-              showDragHandle: true,
-            ),
-          );
-        },
-      ),
+    return SliverReorderableList(
+      itemCount: songsList.length,
+      itemBuilder: (context, index) {
+        final song = songsList[index];
+        final isRemovable = _playlist['source'] == 'user-created';
+        final totalItems = songsList.length;
+        final borderRadius = getItemBorderRadius(index, totalItems);
+
+        return ReorderableDragStartListener(
+          key: ValueKey(_generateStableKey(song, index)),
+          index: index,
+          child: SongBar(
+            song,
+            true,
+            onRemove: isRemovable
+                ? () => {
+                    if (removeSongFromPlaylist(
+                      _playlist,
+                      song,
+                      removeOneAtIndex: index,
+                    ))
+                      {_updateSongsListOnRemove(index)},
+                  }
+                : null,
+            onPlay: () => {
+              audioHandler.playPlaylistSong(
+                playlist: _playlist,
+                songIndex: index,
+              ),
+            },
+            borderRadius: borderRadius,
+            showDragHandle: true,
+          ),
+        );
+      },
+      onReorder: _handleSongReorder,
     );
   }
 
   Widget _buildStandardSongList() {
-    return PagingListener(
-      controller: _pagingController,
-      builder: (context, state, fetchNextPage) => PagedSliverList(
-        state: state,
-        fetchNextPage: fetchNextPage,
-        builderDelegate: PagedChildBuilderDelegate<dynamic>(
-          itemBuilder: (context, item, index) {
-            final isRemovable = _playlist['source'] == 'user-created';
-            return _buildSongListItem(item, index, isRemovable);
+    final songsList = _playlist['list'] as List<dynamic>;
+
+    return SliverList(
+      key: ValueKey(_sortType), // Force rebuild when sort changes
+      delegate: SliverChildBuilderDelegate((context, index) {
+        final song = songsList[index];
+        final isRemovable = _playlist['source'] == 'user-created';
+        final totalItems = songsList.length;
+        final borderRadius = getItemBorderRadius(index, totalItems);
+
+        return SongBar(
+          song,
+          true,
+          onRemove: isRemovable
+              ? () => {
+                  if (removeSongFromPlaylist(
+                    _playlist,
+                    song,
+                    removeOneAtIndex: index,
+                  ))
+                    {_updateSongsListOnRemove(index)},
+                }
+              : null,
+          onPlay: () => {
+            audioHandler.playPlaylistSong(
+              playlist: _playlist,
+              songIndex: index,
+            ),
           },
-        ),
-      ),
+          borderRadius: borderRadius,
+          showDragHandle: false,
+        );
+      }, childCount: songsList.length),
     );
   }
 
@@ -846,100 +756,19 @@ class _PlaylistPageState extends State<PlaylistPage> {
       newIndex -= 1;
     }
 
-    final item = _currentDisplayList.removeAt(oldIndex);
-    _currentDisplayList.insert(newIndex, item);
+    final playlistList = _playlist['list'] as List<dynamic>;
+    final item = playlistList.removeAt(oldIndex);
+    playlistList.insert(newIndex, item);
 
-    // Also update the original list if this is default sort
-    if (_sortType == PlaylistSortType.default_) {
-      _originalPlaylistList.clear();
-      _originalPlaylistList.addAll(_currentDisplayList);
-    }
-
-    // Update playlist for other methods
-    _playlist['list'] = List<dynamic>.from(_currentDisplayList);
+    // Update original list
+    _originalPlaylistList.clear();
+    _originalPlaylistList.addAll(playlistList);
 
     if (_playlist['source'] == 'user-created') {
       _saveCustomPlaylistOrder();
     }
 
-    _pagingController.refresh();
-  }
-
-  Widget _buildSortActionButton() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Enable/Disable sorting button
-        IconButton(
-          icon: Icon(
-            _sortingEnabled
-                ? FluentIcons.arrow_sort_24_filled
-                : FluentIcons.arrow_sort_24_regular,
-          ),
-          onPressed: () {
-            setState(() {
-              _sortingEnabled = !_sortingEnabled;
-            });
-
-            // If disabling sorting, restore to default order
-            if (!_sortingEnabled) {
-              _sortPlaylist(PlaylistSortType.default_);
-              _pagingController.refresh();
-            }
-          },
-          tooltip: _sortingEnabled ? 'Disable Sorting' : 'Enable Sorting',
-        ),
-
-        // Sort type dropdown button
-        IgnorePointer(
-          ignoring: !_sortingEnabled,
-          child: Opacity(
-            opacity: _sortingEnabled ? 1.0 : 0.5,
-            child: PopupMenuButton<PlaylistSortType>(
-              icon: Icon(
-                FluentIcons.filter_16_filled,
-                color: _sortingEnabled
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              elevation: 1,
-              offset: const Offset(0, 40),
-              borderRadius: commonBarRadius,
-              onSelected: _sortingEnabled ? _handleSortTypeSelected : null,
-              itemBuilder: (context) {
-                return PlaylistSortType.values.map((type) {
-                  return PopupMenuItem<PlaylistSortType>(
-                    value: type,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _getSortTypeDisplayText(type),
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.onSurface,
-                              fontWeight: type == _sortType
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                        if (type == _sortType)
-                          Icon(
-                            Icons.check,
-                            size: 18,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                      ],
-                    ),
-                  );
-                }).toList();
-              },
-            ),
-          ),
-        ),
-      ],
-    );
+    setState(() {});
   }
 
   Widget _buildSortToggleButton() {
@@ -953,7 +782,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
         setState(() {
           _sortingEnabled = !_sortingEnabled;
         });
-        // No data change - just UI toggle
+        // Just toggle UI - the data stays the same
       },
       tooltip: _sortingEnabled ? 'Disable Sorting' : 'Enable Sorting',
     );
