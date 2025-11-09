@@ -176,10 +176,12 @@ class _PlaylistPageState extends State<PlaylistPage> {
               Navigator.pop(context, widget.playlistData == _playlist),
         ),
         actions: [
-          // Add simple enable/disable sort button
-          _buildSortToggleButton(),
-          const SizedBox(width: 10),
-          if (_playlist['source'] != 'user-created') ...[
+          if (_playlist != null && _playlist['source'] == 'user-created') ...[
+            // Add simple enable/disable sort button
+            _buildSortToggleButton(),
+            const SizedBox(width: 10),
+          ],
+          if (_playlist != null && _playlist['source'] != 'user-created') ...[
             if (widget.playlistId != null) ...[_buildLikeButton()],
             const SizedBox(width: 10),
           ],

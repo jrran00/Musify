@@ -572,7 +572,7 @@ Future<void> updatePlaylistLikeStatus(String playlistId, bool add) async {
       )) {
         final playlist = playlists.firstWhere(
           (playlist) => playlist['ytid'] == playlistId,
-          orElse: () => <String, dynamic>{},
+          orElse: () => {},
         );
 
         if (playlist.isNotEmpty) {
@@ -922,7 +922,7 @@ Future<Map?> getPlaylistInfoForWidget(
     if (id != null && id.toString().startsWith('customId-')) {
       playlist = userCustomPlaylists.value.firstWhere(
         (p) => p['ytid'] == id,
-        orElse: () => null,
+        orElse: () => {},
       );
       if (playlist != null) {
         return playlist;
@@ -931,18 +931,18 @@ Future<Map?> getPlaylistInfoForWidget(
 
     // Check in existing playlists.
 
-    playlist = playlists.firstWhere((p) => p['ytid'] == id, orElse: () => null);
+    playlist = playlists.firstWhere((p) => p['ytid'] == id, orElse: () => {});
 
     // Check in user playlists if not found.
     if (playlist == null) {
       final userPl = await getUserPlaylists();
-      playlist = userPl.firstWhere((p) => p['ytid'] == id, orElse: () => null);
+      playlist = userPl.firstWhere((p) => p['ytid'] == id, orElse: () => {});
     }
 
     // Check in cached online playlists if still not found.
     playlist ??= onlinePlaylists.firstWhere(
       (p) => p['ytid'] == id,
-      orElse: () => null,
+      orElse: () => {},
     );
 
     // If still not found, attempt to fetch playlist info.
