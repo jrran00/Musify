@@ -66,22 +66,24 @@ class PlaylistPage extends StatefulWidget {
 
 class _PlaylistPageState extends State<PlaylistPage> {
   dynamic _playlist;
-  late final List<dynamic>
-  _originalPlaylistList; // Keep original order separately
-
+  late final List<dynamic> _originalPlaylistList;
   final int _itemsPerPage = 35;
   late final PagingController<int, dynamic> _pagingController;
+
+  // Store the current display order separately
+  List<dynamic> _currentDisplayList = [];
 
   late final playlistLikeStatus = ValueNotifier<bool>(
     isPlaylistAlreadyLiked(widget.playlistId),
   );
   bool playlistOfflineStatus = false;
 
-  // Sorting
+  // Sorting state
   late PlaylistSortType _sortType = PlaylistSortType.values.firstWhere(
     (e) => e.name == playlistSortSetting,
     orElse: () => PlaylistSortType.default_,
   );
+  bool _sortingEnabled = true;
 
   @override
   void initState() {
@@ -89,14 +91,10 @@ class _PlaylistPageState extends State<PlaylistPage> {
 
     _pagingController = PagingController<int, dynamic>(
       getNextPageKey: (state) {
-        if (_playlist == null || _playlist['list'] == null) return null;
-
-        final playlistList = _playlist['list'] as List<dynamic>;
-        final totalCount = playlistList.length;
+        if (_currentDisplayList.isEmpty) return null;
+        final totalCount = _currentDisplayList.length;
         final currentlyLoaded = state.items?.length ?? 0;
-
         if (currentlyLoaded >= totalCount) return null;
-
         return currentlyLoaded;
       },
       fetchPage: _fetchPage,
@@ -134,7 +132,10 @@ class _PlaylistPageState extends State<PlaylistPage> {
 
       if (_playlist != null && _playlist['list'] != null) {
         _originalPlaylistList = List<dynamic>.from(_playlist['list'] as List);
-        _sortPlaylist(_sortType);
+        _currentDisplayList = List<dynamic>.from(_originalPlaylistList);
+
+        // Apply initial sort
+        _applySort(_sortType);
         if (mounted) {
           setState(() {});
         }
@@ -149,19 +150,45 @@ class _PlaylistPageState extends State<PlaylistPage> {
 
   Future<List<dynamic>> _fetchPage(int pageKey) async {
     try {
-      if (_playlist == null || _playlist['list'] == null) {
-        return [];
-      }
-
-      final playlistList = _playlist['list'] as List<dynamic>;
-      final totalCount = playlistList.length;
+      if (_currentDisplayList.isEmpty) return [];
       final startIndex = pageKey;
-      final endIndex = min(startIndex + _itemsPerPage, totalCount);
-
-      return playlistList.sublist(startIndex, endIndex);
+      final endIndex = min(
+        startIndex + _itemsPerPage,
+        _currentDisplayList.length,
+      );
+      return _currentDisplayList.sublist(startIndex, endIndex);
     } catch (error) {
       rethrow;
     }
+  }
+
+  void _applySort(PlaylistSortType type) {
+    if (_originalPlaylistList.isEmpty) return;
+
+    List<dynamic> sortedList;
+
+    switch (type) {
+      case PlaylistSortType.default_:
+        sortedList = List<dynamic>.from(_originalPlaylistList);
+        break;
+      case PlaylistSortType.title:
+        sortedList = List<dynamic>.from(_originalPlaylistList);
+        sortSongsByKey(sortedList, 'title');
+        break;
+      case PlaylistSortType.artist:
+        sortedList = List<dynamic>.from(_originalPlaylistList);
+        sortSongsByKey(sortedList, 'artist');
+        break;
+      case PlaylistSortType.random:
+        sortedList = List<dynamic>.from(_originalPlaylistList);
+        shufflePlaylistRandomly(sortedList);
+        break;
+    }
+
+    _currentDisplayList = sortedList;
+    _playlist['list'] =
+        sortedList; // Also update the playlist for other methods
+    _pagingController.refresh();
   }
 
   @override
@@ -174,6 +201,10 @@ class _PlaylistPageState extends State<PlaylistPage> {
               Navigator.pop(context, widget.playlistData == _playlist),
         ),
         actions: [
+          // Add simple enable/disable sort button
+          _buildSortToggleButton(),
+          const SizedBox(width: 10),
+
           if (widget.playlistId != null) ...[_buildLikeButton()],
           const SizedBox(width: 10),
           if (_playlist != null) ...[
@@ -205,6 +236,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
           ? PagingListener(
               controller: _pagingController,
               builder: (context, state, fetchNextPage) => CustomScrollView(
+                //controller: _scrollController, // Add this
                 slivers: [
                   SliverToBoxAdapter(
                     child: Padding(
@@ -212,6 +244,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
                       child: buildPlaylistHeader(),
                     ),
                   ),
+                  // Keep the sort type button in the body
                   if (_playlist['list'].isNotEmpty) ...[
                     SliverToBoxAdapter(
                       child: Padding(
@@ -222,16 +255,15 @@ class _PlaylistPageState extends State<PlaylistPage> {
                         ),
                         child: Align(
                           alignment: Alignment.centerRight,
-                          child: _buildSortSongActionButton(),
+                          child: _buildSortTypeButton(),
                         ),
                       ),
                     ),
-                    SliverPadding(
-                      padding: commonListViewBottmomPadding,
-                      sliver: _buildSongList(),
-                    ),
-                  ] else
-                    const SliverFillRemaining(child: SizedBox.expand()),
+                  ],
+                  SliverPadding(
+                    padding: commonListViewBottmomPadding,
+                    sliver: _buildSongList(),
+                  ),
                 ],
               ),
             )
@@ -526,10 +558,10 @@ class _PlaylistPageState extends State<PlaylistPage> {
         _playlist['ytid'],
       );
       if (updatedPlaylist != null) {
-        _playlist = updatedPlaylist;
-        _pagingController.refresh();
+        setState(() {
+          _playlist = updatedPlaylist;
+        });
       } else {
-        // Handle the case where playlist wasn't found
         showToast(context, 'Playlist not found in library');
       }
     } else {
@@ -538,7 +570,6 @@ class _PlaylistPageState extends State<PlaylistPage> {
         setState(() {
           _playlist = updatedPlaylist;
         });
-        _pagingController.refresh();
       }
     }
   }
@@ -559,11 +590,11 @@ class _PlaylistPageState extends State<PlaylistPage> {
           songToRemove,
           indexToInsert: indexOfRemovedSong,
         );
-        _pagingController.refresh();
+        setState(() {});
       },
     );
 
-    _pagingController.refresh();
+    setState(() {});
   }
 
   String _getSortTypeDisplayText(PlaylistSortType type) {
@@ -575,59 +606,110 @@ class _PlaylistPageState extends State<PlaylistPage> {
       case PlaylistSortType.artist:
         return context.l10n!.artist;
       case PlaylistSortType.random:
-        return context.l10n!.random; // Make sure to add this translation
+        return context.l10n!.random;
     }
   }
 
   Widget _buildSortSongActionButton() {
-    return SortButton<PlaylistSortType>(
-      currentSortType: _sortType,
-      sortTypes: PlaylistSortType.values,
-      sortTypeToString: _getSortTypeDisplayText,
-      // allow reselection only for the "random" sort type
-      allowReselect: (type) => type == PlaylistSortType.random,
-      onSelected: (type) {
-        setState(() {
-          _sortType = type;
-          addOrUpdateData('settings', 'playlistSortType', type.name);
-          playlistSortSetting = type.name;
-          _sortPlaylist(type);
-        });
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Enable/Disable sorting button on the left
+        IconButton(
+          icon: Icon(
+            _sortingEnabled
+                ? FluentIcons.arrow_sort_24_filled
+                : FluentIcons.arrow_sort_24_regular,
+          ),
+          onPressed: () {
+            setState(() {
+              _sortingEnabled = !_sortingEnabled;
+            });
 
-        // Refresh pagination inside setState ensures UI updates properly
-        _pagingController.refresh();
-      },
+            // If disabling sorting, restore to default order
+            if (!_sortingEnabled) {
+              _sortPlaylist(PlaylistSortType.default_);
+              _pagingController.refresh();
+            }
+          },
+          tooltip: _sortingEnabled ? 'Disable Sorting' : 'Enable Sorting',
+        ),
+        const SizedBox(width: 8),
+
+        // Existing sort button on the right
+        SortButton<PlaylistSortType>(
+          currentSortType: _sortType,
+          sortTypes: PlaylistSortType.values,
+          sortTypeToString: _getSortTypeDisplayText,
+          allowReselect: (type) => type == PlaylistSortType.random,
+          onSelected: _sortingEnabled
+              ? _handleSortTypeSelected
+              : _handleDisabledSort,
+        ),
+      ],
     );
   }
 
+  // Add this separate method to handle sort type selection
+  void _handleSortTypeSelected(PlaylistSortType type) {
+    setState(() {
+      _sortType = type;
+      addOrUpdateData('settings', 'playlistSortType', type.name);
+      playlistSortSetting = type.name;
+    });
+    _applySort(type);
+  }
+
+  void _handleDisabledSort(PlaylistSortType type) {
+    // Option 1: Do nothing when sorting is disabled
+    // This will still show the menu but won't perform any action
+
+    // Option 2: Show a toast message (uncomment if you want this)
+    // showToast(context, context.l10n!.sortingDisabled);
+  }
   void _sortPlaylist(PlaylistSortType type) {
     if (_playlist == null || _playlist['list'] == null) return;
 
+    List<dynamic> sortedList;
+
     switch (type) {
       case PlaylistSortType.default_:
-        // Restore original order from backup
-        _playlist['list'] = List<dynamic>.from(_originalPlaylistList);
+        // For default, use the current order (could be modified by drag-drop)
+        sortedList = List<dynamic>.from(_playlist['list']);
         break;
       case PlaylistSortType.title:
-        final playlist = List<dynamic>.from(_playlist['list']);
-        sortSongsByKey(playlist, 'title');
-        _playlist['list'] = playlist;
+        // For title sort, sort from whatever is currently displayed
+        sortedList = List<dynamic>.from(_playlist['list']);
+        sortSongsByKey(sortedList, 'title');
         break;
       case PlaylistSortType.artist:
-        final playlist = List<dynamic>.from(_playlist['list']);
-        sortSongsByKey(playlist, 'artist');
-        _playlist['list'] = playlist;
+        // For artist sort, sort from whatever is currently displayed
+        sortedList = List<dynamic>.from(_playlist['list']);
+        sortSongsByKey(sortedList, 'artist');
         break;
       case PlaylistSortType.random:
-        final playlist = List<dynamic>.from(_playlist['list']);
-        shufflePlaylistRandomly(playlist);
-        _playlist['list'] = playlist;
+        // For random sort, shuffle whatever is currently displayed
+        sortedList = List<dynamic>.from(_playlist['list']);
+        shufflePlaylistRandomly(sortedList);
         break;
     }
 
-    // Reset paging controller to top
-    _pagingController.refresh();
+    _playlist['list'] = sortedList;
   }
+
+  // void _saveScrollPosition() {
+  //   if (_scrollController.hasClients) {
+  //     _savedScrollPosition = _scrollController.position.pixels;
+  //   }
+  // }
+
+  // void _restoreScrollPosition() {
+  //   if (_scrollController.hasClients) {
+  //     WidgetsBinding.instance.addPostFrameCallback((_) {
+  //       _scrollController.jumpTo(_savedScrollPosition);
+  //     });
+  //   }
+  // }
 
   Widget _buildSongListItem(dynamic song, int index, bool isRemovable) {
     final items = _pagingController.items ?? [];
@@ -671,6 +753,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
 
   Widget _buildSongList() {
     final isDraggable =
+        _sortingEnabled &&
         _sortType == PlaylistSortType.default_ &&
         _playlist['source'] == 'user-created';
 
@@ -697,18 +780,16 @@ class _PlaylistPageState extends State<PlaylistPage> {
   }
 
   Widget _buildReorderableSongList() {
-    final items = _playlist['list'] as List<dynamic>;
-
     return SliverToBoxAdapter(
       child: ReorderableListView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        itemCount: items.length,
+        itemCount: _currentDisplayList.length,
         onReorder: _handleSongReorder,
         itemBuilder: (context, index) {
-          final item = items[index];
+          final item = _currentDisplayList[index];
           final isRemovable = _playlist['source'] == 'user-created';
-          final totalItems = items.length;
+          final totalItems = _currentDisplayList.length;
           final borderRadius = getItemBorderRadius(index, totalItems);
 
           return ReorderableDragStartListener(
@@ -759,23 +840,138 @@ class _PlaylistPageState extends State<PlaylistPage> {
   }
 
   void _handleSongReorder(int oldIndex, int newIndex) {
+    if (!_sortingEnabled || _sortType != PlaylistSortType.default_) return;
+
     if (oldIndex < newIndex) {
       newIndex -= 1;
     }
 
-    final playlistList = _playlist['list'] as List<dynamic>;
-    final item = playlistList.removeAt(oldIndex);
-    playlistList.insert(newIndex, item);
+    final item = _currentDisplayList.removeAt(oldIndex);
+    _currentDisplayList.insert(newIndex, item);
 
-    // Update original order
-    _originalPlaylistList.clear();
-    _originalPlaylistList.addAll(playlistList);
+    // Also update the original list if this is default sort
+    if (_sortType == PlaylistSortType.default_) {
+      _originalPlaylistList.clear();
+      _originalPlaylistList.addAll(_currentDisplayList);
+    }
 
-    // Save for user-created playlists
+    // Update playlist for other methods
+    _playlist['list'] = List<dynamic>.from(_currentDisplayList);
+
     if (_playlist['source'] == 'user-created') {
       _saveCustomPlaylistOrder();
     }
 
     _pagingController.refresh();
+  }
+
+  Widget _buildSortActionButton() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Enable/Disable sorting button
+        IconButton(
+          icon: Icon(
+            _sortingEnabled
+                ? FluentIcons.arrow_sort_24_filled
+                : FluentIcons.arrow_sort_24_regular,
+          ),
+          onPressed: () {
+            setState(() {
+              _sortingEnabled = !_sortingEnabled;
+            });
+
+            // If disabling sorting, restore to default order
+            if (!_sortingEnabled) {
+              _sortPlaylist(PlaylistSortType.default_);
+              _pagingController.refresh();
+            }
+          },
+          tooltip: _sortingEnabled ? 'Disable Sorting' : 'Enable Sorting',
+        ),
+
+        // Sort type dropdown button
+        IgnorePointer(
+          ignoring: !_sortingEnabled,
+          child: Opacity(
+            opacity: _sortingEnabled ? 1.0 : 0.5,
+            child: PopupMenuButton<PlaylistSortType>(
+              icon: Icon(
+                FluentIcons.filter_16_filled,
+                color: _sortingEnabled
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              elevation: 1,
+              offset: const Offset(0, 40),
+              borderRadius: commonBarRadius,
+              onSelected: _sortingEnabled ? _handleSortTypeSelected : null,
+              itemBuilder: (context) {
+                return PlaylistSortType.values.map((type) {
+                  return PopupMenuItem<PlaylistSortType>(
+                    value: type,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _getSortTypeDisplayText(type),
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              fontWeight: type == _sortType
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        if (type == _sortType)
+                          Icon(
+                            Icons.check,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                      ],
+                    ),
+                  );
+                }).toList();
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSortToggleButton() {
+    return IconButton(
+      icon: Icon(
+        _sortingEnabled
+            ? FluentIcons.arrow_sort_24_filled
+            : FluentIcons.arrow_sort_24_regular,
+      ),
+      onPressed: () {
+        setState(() {
+          _sortingEnabled = !_sortingEnabled;
+        });
+        // No data change - just UI toggle
+      },
+      tooltip: _sortingEnabled ? 'Disable Sorting' : 'Enable Sorting',
+    );
+  }
+
+  Widget _buildSortTypeButton() {
+    return IgnorePointer(
+      ignoring: !_sortingEnabled,
+      child: Opacity(
+        opacity: _sortingEnabled ? 1.0 : 0.5,
+        child: SortButton<PlaylistSortType>(
+          currentSortType: _sortType,
+          sortTypes: PlaylistSortType.values,
+          sortTypeToString: _getSortTypeDisplayText,
+          allowReselect: (type) => type == PlaylistSortType.random,
+          onSelected: _sortingEnabled ? _handleSortTypeSelected : (type) {},
+        ),
+      ),
+    );
   }
 }
