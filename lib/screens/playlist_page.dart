@@ -710,13 +710,12 @@ class _PlaylistPageState extends State<PlaylistPage> {
         final totalItems = songsList.length;
         final borderRadius = getItemBorderRadius(index, totalItems);
 
-        // Use DelayedDragStartListener for long press to drag
         return ReorderableDelayedDragStartListener(
           key: ValueKey(_generateStableKey(song, index)),
           index: index,
-          child: SongBar(
-            song,
-            true,
+          child: _ReorderableSongBar(
+            // ← This is the key change
+            song: song,
             onRemove: isRemovable
                 ? () => {
                     if (removeSongFromPlaylist(
@@ -740,7 +739,6 @@ class _PlaylistPageState extends State<PlaylistPage> {
       },
       onReorder: _handleSongReorder,
       onReorderStart: (index) {
-        // Optional: Add haptic feedback when drag starts
         HapticFeedback.lightImpact();
       },
     );
@@ -882,5 +880,78 @@ class _PlaylistPageState extends State<PlaylistPage> {
             ),
           )
         : const SizedBox.shrink();
+  }
+}
+
+class _ReorderableSongBar extends StatefulWidget {
+  const _ReorderableSongBar({
+    required this.song,
+    required this.onRemove,
+    required this.onPlay,
+    required this.borderRadius,
+    required this.showDragHandle,
+  });
+
+  final dynamic song;
+  final VoidCallback? onRemove;
+  final VoidCallback? onPlay;
+  final BorderRadius borderRadius;
+  final bool showDragHandle;
+
+  @override
+  State<_ReorderableSongBar> createState() => _ReorderableSongBarState();
+}
+
+class _ReorderableSongBarState extends State<_ReorderableSongBar> {
+  bool _isBeingDragged = false;
+
+  void _updateDragState(bool isDragged) {
+    if (mounted) {
+      setState(() {
+        _isBeingDragged = isDragged;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerDown: (_) {
+        _updateDragState(true);
+      },
+      onPointerUp: (_) {
+        _updateDragState(false);
+      },
+      onPointerCancel: (_) {
+        _updateDragState(false);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+        decoration: BoxDecoration(
+          borderRadius: widget.borderRadius,
+          color: _isBeingDragged
+              ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
+              : Colors.transparent,
+          border: _isBeingDragged
+              ? Border.all(
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 1.5,
+                )
+              : null,
+        ),
+        child: SongBar(
+          widget.song,
+          true, // clearPlaylist
+          onRemove: widget.onRemove,
+          onPlay: widget.onPlay,
+          borderRadius: widget.borderRadius,
+          showDragHandle: widget.showDragHandle,
+          backgroundColor: _isBeingDragged
+              ? Theme.of(context).colorScheme.primary.withOpacity(0.05)
+              : null,
+        ),
+      ),
+    );
   }
 }
