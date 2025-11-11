@@ -82,7 +82,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
     (e) => e.name == playlistSortSetting,
     orElse: () => PlaylistSortType.default_,
   );
-  bool _sortingEnabled = true;
+  bool _sortingEnabled = false;
 
   @override
   void initState() {
@@ -166,6 +166,10 @@ class _PlaylistPageState extends State<PlaylistPage> {
     setState(() {});
   }
 
+  void _showSortNotAvailableMessage() {
+    showToast(context, 'Drag & drop only available in Default sort mode');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -220,6 +224,8 @@ class _PlaylistPageState extends State<PlaylistPage> {
                     child: buildPlaylistHeader(),
                   ),
                 ),
+                // ADD THE INSTRUCTION BANNER HERE
+                SliverToBoxAdapter(child: _buildInstructionBanner()),
                 if (_playlist['list'].isNotEmpty) ...[
                   SliverToBoxAdapter(
                     child: Padding(
@@ -265,6 +271,17 @@ class _PlaylistPageState extends State<PlaylistPage> {
       _buildPlaylistImage(),
       _playlist['title'],
       _songsLength,
+    );
+  }
+
+  Widget _buildDragHandle(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+      child: Icon(
+        Icons.drag_handle,
+        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+        size: 20,
+      ),
     );
   }
 
@@ -604,6 +621,10 @@ class _PlaylistPageState extends State<PlaylistPage> {
       _sortType = type;
       addOrUpdateData('settings', 'playlistSortType', type.name);
       playlistSortSetting = type.name;
+      // Automatically disable sorting when switching away from Default
+      if (type != PlaylistSortType.default_) {
+        _sortingEnabled = false;
+      }
     });
     _applySort(type);
   }
@@ -689,7 +710,8 @@ class _PlaylistPageState extends State<PlaylistPage> {
         final totalItems = songsList.length;
         final borderRadius = getItemBorderRadius(index, totalItems);
 
-        return ReorderableDragStartListener(
+        // Use DelayedDragStartListener for long press to drag
+        return ReorderableDelayedDragStartListener(
           key: ValueKey(_generateStableKey(song, index)),
           index: index,
           child: SongBar(
@@ -717,6 +739,10 @@ class _PlaylistPageState extends State<PlaylistPage> {
         );
       },
       onReorder: _handleSongReorder,
+      onReorderStart: (index) {
+        // Optional: Add haptic feedback when drag starts
+        HapticFeedback.lightImpact();
+      },
     );
   }
 
@@ -787,6 +813,12 @@ class _PlaylistPageState extends State<PlaylistPage> {
             : FluentIcons.arrow_sort_24_regular,
       ),
       onPressed: () {
+        // If current sort type is NOT Default, show message and don't enable
+        if (_sortType != PlaylistSortType.default_) {
+          _showSortNotAvailableMessage();
+          return;
+        }
+
         setState(() {
           _sortingEnabled = !_sortingEnabled;
         });
@@ -796,19 +828,59 @@ class _PlaylistPageState extends State<PlaylistPage> {
     );
   }
 
+  // Widget _buildSortTypeButton() {
+  //   return IgnorePointer(
+  //     ignoring: !_sortingEnabled,
+  //     child: Opacity(
+  //       opacity: _sortingEnabled ? 1.0 : 0.5,
+  //       child: SortButton<PlaylistSortType>(
+  //         currentSortType: _sortType,
+  //         sortTypes: PlaylistSortType.values,
+  //         sortTypeToString: _getSortTypeDisplayText,
+  //         allowReselect: (type) => type == PlaylistSortType.random,
+  //         onSelected: _sortingEnabled ? _handleSortTypeSelected : (type) {},
+  //       ),
+  //     ),
+  //   );
+  // }
   Widget _buildSortTypeButton() {
-    return IgnorePointer(
-      ignoring: !_sortingEnabled,
-      child: Opacity(
-        opacity: _sortingEnabled ? 1.0 : 0.5,
-        child: SortButton<PlaylistSortType>(
-          currentSortType: _sortType,
-          sortTypes: PlaylistSortType.values,
-          sortTypeToString: _getSortTypeDisplayText,
-          allowReselect: (type) => type == PlaylistSortType.random,
-          onSelected: _sortingEnabled ? _handleSortTypeSelected : (type) {},
-        ),
-      ),
+    return SortButton<PlaylistSortType>(
+      currentSortType: _sortType,
+      sortTypes: PlaylistSortType.values,
+      sortTypeToString: _getSortTypeDisplayText,
+      allowReselect: (type) => type == PlaylistSortType.random,
+      onSelected: _handleSortTypeSelected,
     );
+  }
+
+  Widget _buildInstructionBanner() {
+    return _sortingEnabled && _sortType == PlaylistSortType.default_
+        ? Container(
+            padding: const EdgeInsets.all(12.0),
+            margin: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8.0),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.touch_app,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Long press and hold to drag songs',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ],
+            ),
+          )
+        : const SizedBox.shrink();
   }
 }

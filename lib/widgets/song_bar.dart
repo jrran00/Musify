@@ -44,6 +44,7 @@ class SongBar extends StatefulWidget {
     this.onRemove,
     this.borderRadius = BorderRadius.zero,
     this.showDragHandle = false, // Default to false
+    this.isBeingDragged = false, // Add this parameter
     super.key,
   });
 
@@ -59,6 +60,7 @@ class SongBar extends StatefulWidget {
 
   // In SongBar widget constructor, add:
   final bool showDragHandle; // Changed to non-nullable with default
+  final bool isBeingDragged; // Add this
 
   @override
   State<SongBar> createState() => _SongBarState();
@@ -113,37 +115,51 @@ class _SongBarState extends State<SongBar> {
       padding: commonBarPadding,
       child: GestureDetector(
         onTap: _handleSongTap,
-        child: Card(
-          color: widget.backgroundColor,
-          shape: RoundedRectangleBorder(borderRadius: widget.borderRadius),
-          margin: const EdgeInsets.only(bottom: 3),
-          child: Padding(
-            padding: commonBarContentPadding,
-            child: Row(
-              children: [
-                if (widget.showDragHandle)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: Icon(
-                      FluentIcons.re_order_24_filled,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurfaceVariant.withOpacity(0.6),
-                      size: 20,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          child: Card(
+            color: widget.isBeingDragged
+                ? primaryColor.withOpacity(0.1)
+                : widget.backgroundColor,
+            elevation: widget.isBeingDragged ? 4 : 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: widget.borderRadius,
+              side: widget.isBeingDragged
+                  ? BorderSide(color: primaryColor, width: 1.5)
+                  : BorderSide.none,
+            ),
+            margin: const EdgeInsets.only(bottom: 3),
+            child: Padding(
+              padding: commonBarContentPadding,
+              child: Row(
+                children: [
+                  if (widget.showDragHandle)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: Icon(
+                        FluentIcons.re_order_24_filled,
+                        color: widget.isBeingDragged
+                            ? primaryColor
+                            : Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant.withOpacity(0.6),
+                        size: 20,
+                      ),
+                    ),
+                  _buildAlbumArt(primaryColor),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _SongInfo(
+                      title: _songTitle,
+                      artist: _songArtist,
+                      primaryColor: primaryColor,
+                      secondaryColor: theme.colorScheme.secondary,
                     ),
                   ),
-                _buildAlbumArt(primaryColor),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _SongInfo(
-                    title: _songTitle,
-                    artist: _songArtist,
-                    primaryColor: primaryColor,
-                    secondaryColor: theme.colorScheme.secondary,
-                  ),
-                ),
-                _buildActionButtons(context, primaryColor),
-              ],
+                  _buildActionButtons(context, primaryColor),
+                ],
+              ),
             ),
           ),
         ),
