@@ -922,7 +922,7 @@ Future<Map?> getPlaylistInfoForWidget(
     if (id != null && id.toString().startsWith('customId-')) {
       playlist = userCustomPlaylists.value.firstWhere(
         (p) => p['ytid'] == id,
-        orElse: () => {},
+        orElse: () => null,
       );
       if (playlist != null) {
         return playlist;
@@ -931,18 +931,18 @@ Future<Map?> getPlaylistInfoForWidget(
 
     // Check in existing playlists.
 
-    playlist = playlists.firstWhere((p) => p['ytid'] == id, orElse: () => {});
+    playlist = playlists.firstWhere((p) => p['ytid'] == id, orElse: () => null);
 
     // Check in user playlists if not found.
     if (playlist == null) {
       final userPl = await getUserPlaylists();
-      playlist = userPl.firstWhere((p) => p['ytid'] == id, orElse: () => {});
+      playlist = userPl.firstWhere((p) => p['ytid'] == id, orElse: () => null);
     }
 
     // Check in cached online playlists if still not found.
     playlist ??= onlinePlaylists.firstWhere(
       (p) => p['ytid'] == id,
-      orElse: () => {},
+      orElse: () => null,
     );
 
     // If still not found, attempt to fetch playlist info.

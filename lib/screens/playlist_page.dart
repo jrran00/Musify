@@ -265,13 +265,15 @@ class _PlaylistPageState extends State<PlaylistPage> {
   }
 
   Widget buildPlaylistHeader() {
-    final _songsLength = _playlist['list'].length;
+    // Check if _playlist is null first
+    if (_playlist == null) {
+      return const SizedBox.shrink(); // Or a loading placeholder
+    }
 
-    return PlaylistHeader(
-      _buildPlaylistImage(),
-      _playlist['title'],
-      _songsLength,
-    );
+    final _songsLength = _playlist['list']?.length ?? 0;
+    final title = _playlist['title']?.toString() ?? 'Unknown Playlist';
+
+    return PlaylistHeader(_buildPlaylistImage(), title, _songsLength);
   }
 
   Widget _buildDragHandle(BuildContext context) {
