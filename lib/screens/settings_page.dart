@@ -345,7 +345,7 @@ class SettingsPage extends StatelessWidget {
                 child: InkWell(
                   borderRadius: BorderRadius.circular(15),
                   onTap: () =>
-                      launchURL(Uri.parse('https://ko-fi.com/gokadzev')),
+                      launchURL(Uri.parse('https://github.com/jrran00')),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                       vertical: 12,

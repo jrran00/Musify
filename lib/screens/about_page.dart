@@ -51,47 +51,47 @@ class AboutPage extends StatelessWidget {
               ),
             ),
             const Divider(color: Colors.white24, thickness: 0.8, height: 20),
-            Card(
-              child: ListTile(
-                contentPadding: const EdgeInsets.all(8),
-                leading: Container(
-                  height: 50,
-                  width: 50,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    image: DecorationImage(
-                      fit: BoxFit.fill,
-                      image: NetworkImage(
-                        'https://avatars.githubusercontent.com/u/79704324?v=4',
-                      ),
-                    ),
-                  ),
-                ),
-                title: const Text(
-                  'Valeri Gokadze',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                subtitle: const Text('WEB & APP Developer'),
-                trailing: Wrap(
-                  children: <Widget>[
-                    IconButton(
-                      icon: const Icon(FluentIcons.code_24_filled),
-                      tooltip: 'Github',
-                      onPressed: () {
-                        launchURL(Uri.parse('https://github.com/gokadzev'));
-                      },
-                    ),
-                    IconButton(
-                      icon: const Icon(FluentIcons.globe_24_filled),
-                      tooltip: 'Website',
-                      onPressed: () {
-                        launchURL(Uri.parse('https://gokadzev.github.io'));
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            // Card(
+            //   child: ListTile(
+            //     contentPadding: const EdgeInsets.all(8),
+            //     leading: Container(
+            //       height: 50,
+            //       width: 50,
+            //       decoration: const BoxDecoration(
+            //         shape: BoxShape.circle,
+            //         image: DecorationImage(
+            //           fit: BoxFit.fill,
+            //           image: NetworkImage(
+            //             'https://avatars.githubusercontent.com/u/79704324?v=4',
+            //           ),
+            //         ),
+            //       ),
+            //     ),
+            //     title: const Text(
+            //       'Valeri Gokadze',
+            //       style: TextStyle(fontWeight: FontWeight.w600),
+            //     ),
+            //     subtitle: const Text('WEB & APP Developer'),
+            //     trailing: Wrap(
+            //       children: <Widget>[
+            //         IconButton(
+            //           icon: const Icon(FluentIcons.code_24_filled),
+            //           tooltip: 'Github',
+            //           onPressed: () {
+            //             launchURL(Uri.parse('https://github.com/gokadzev'));
+            //           },
+            //         ),
+            //         IconButton(
+            //           icon: const Icon(FluentIcons.globe_24_filled),
+            //           tooltip: 'Website',
+            //           onPressed: () {
+            //             launchURL(Uri.parse('https://gokadzev.github.io'));
+            //           },
+            //         ),
+            //       ],
+            //     ),
+            //   ),
+            // ),
             const SizedBox(height: 10),
             Card(
               child: ListTile(
