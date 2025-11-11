@@ -650,11 +650,17 @@ class _PlaylistPageState extends State<PlaylistPage> {
         _sortType == PlaylistSortType.default_ &&
         _playlist['source'] == 'user-created';
 
-    if (isDraggable) {
-      return _buildReorderableSongList();
-    } else {
-      return _buildStandardSongList();
-    }
+    return KeyedSubtree(
+      key: ValueKey('playlist_${_playlist['list'].hashCode}'),
+      child: isDraggable
+          ? _buildReorderableSongList()
+          : _buildStandardSongList(),
+    );
+    // if (isDraggable) {
+    //   return _buildReorderableSongList();
+    // } else {
+    //   return _buildStandardSongList();
+    // }
   }
 
   String _generateStableKey(dynamic song, int index) {
