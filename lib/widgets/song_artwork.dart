@@ -1,29 +1,9 @@
-/*
- *     Copyright (C) 2025 Valeri Gokadze
- *
- *     Musify is free software: you can redistribute it and/or modify
- *     it under the terms of the GNU General Public License as published by
- *     the Free Software Foundation, either version 3 of the License, or
- *     (at your option) any later version.
- *
- *     Musify is distributed in the hope that it will be useful,
- *     but WITHOUT ANY WARRANTY; without even the implied warranty of
- *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *     GNU General Public License for more details.
- *
- *     You should have received a copy of the GNU General Public License
- *     along with this program.  If not, see <https://www.gnu.org/licenses/>.
- *
- *
- *     For more information about Musify, including how to contribute,
- *     please visit: https://github.com/gokadzev/Musify
- */
-
 import 'dart:io';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:musify/API/musify.dart';
 import 'package:musify/widgets/no_artwork_cube.dart';
 import 'package:musify/widgets/spinner.dart';
 
@@ -35,39 +15,122 @@ class SongArtworkWidget extends StatelessWidget {
     this.borderRadius = 10.0,
     this.errorWidgetIconSize = 20.0,
   });
+
   final double size;
   final MediaItem metadata;
   final double borderRadius;
   final double errorWidgetIconSize;
 
+  /// Try to determine the local file path for artwork safely.
+  String? _resolveLocalArtworkPath() {
+    // Prefer explicit extras key if provided by your app
+    final maybeExtraPath = metadata.extras?['artWorkPath'];
+    if (maybeExtraPath is String && maybeExtraPath.isNotEmpty) {
+      return maybeExtraPath;
+    }
+
+    // Otherwise, if artUri is a file URI, try to extract file path
+    final uri = metadata.artUri;
+    if (uri != null && uri.scheme == 'file') {
+      try {
+        // toFilePath() will throw for non-file URIs; guard with scheme check above
+        return uri.toFilePath();
+      } catch (_) {
+        return null;
+      }
+    }
+
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return metadata.artUri?.scheme == 'file'
-        ? SizedBox(
-          width: size,
-          height: size,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(borderRadius),
-            child: Image.file(
-              File(metadata.extras?['artWorkPath']),
-              fit: BoxFit.cover,
-            ),
-          ),
-        )
-        : CachedNetworkImage(
-          key: ValueKey(metadata.artUri.toString()),
-          width: size,
-          height: size,
-          imageUrl: metadata.artUri.toString(),
-          imageBuilder:
-              (context, imageProvider) => ClipRRect(
-                borderRadius: BorderRadius.circular(borderRadius),
-                child: Image(image: imageProvider, fit: BoxFit.cover),
+    final localPath = _resolveLocalArtworkPath();
+
+    // If we have a local path and file exists -> show file image
+    if (localPath != null) {
+      try {
+        final file = File(localPath);
+        if (file.existsSync()) {
+          return SizedBox(
+            width: size,
+            height: size,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(borderRadius),
+              child: Image.file(
+                file,
+                fit: BoxFit.cover,
+                // extra guard: show placeholder if loading fails
+                errorBuilder: (ctx, error, stack) =>
+                    NullArtworkWidget(iconSize: errorWidgetIconSize),
               ),
-          placeholder: (context, url) => const Spinner(),
-          errorWidget:
-              (context, url, error) =>
-                  NullArtworkWidget(iconSize: errorWidgetIconSize),
-        );
+            ),
+          );
+        } else {
+          FutureBuilder(
+            future: getSongDetails(0, metadata.extras?['ytid'] ?? ''),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const CircularProgressIndicator();
+              }
+
+              final newSongDetails = snapshot.data!;
+              final imageUrl = newSongDetails['image'];
+
+              return SizedBox(
+                width: size,
+                height: size,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(borderRadius),
+                  child: CachedNetworkImage(
+                    imageUrl: imageUrl,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => const Spinner(),
+                    errorWidget: (context, url, error) =>
+                        NullArtworkWidget(iconSize: errorWidgetIconSize),
+                  ),
+                ),
+              );
+            },
+          );
+
+          // file missing on disk — log for debugging and fallthrough to placeholder
+          // (Use print or your logging mechanism)
+          // print('Artwork file missing: $localPath');
+        }
+      } catch (e) {
+        // If anything unexpected happens while reading file, fall back safely
+        // print('Error loading artwork file $localPath: $e');
+      }
+    }
+
+    // For non-file URIs, use network image (if any) with cachedNetworkImage,
+    // else fallback to placeholder
+    final uri = metadata.artUri;
+    if (uri != null && uri.scheme != 'file') {
+      return CachedNetworkImage(
+        key: ValueKey(uri.toString()),
+        width: size,
+        height: size,
+        imageUrl: uri.toString(),
+        imageBuilder: (context, imageProvider) => ClipRRect(
+          borderRadius: BorderRadius.circular(borderRadius),
+          child: Image(image: imageProvider, fit: BoxFit.cover),
+        ),
+        placeholder: (context, url) => const Spinner(),
+        errorWidget: (context, url, error) =>
+            NullArtworkWidget(iconSize: errorWidgetIconSize),
+      );
+    }
+
+    // Nothing valid found — show placeholder
+    return SizedBox(
+      width: size,
+      height: size,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(borderRadius),
+        child: NullArtworkWidget(iconSize: errorWidgetIconSize),
+      ),
+    );
   }
 }

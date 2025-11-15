@@ -19,12 +19,9 @@
  *     please visit: https://github.com/gokadzev/Musify
  */
 
-import 'dart:math';
-
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:musify/API/musify.dart';
 import 'package:musify/extensions/l10n.dart';
 import 'package:musify/main.dart';
@@ -42,7 +39,6 @@ import 'package:musify/widgets/playlist_header.dart';
 import 'package:musify/widgets/song_bar.dart';
 import 'package:musify/widgets/sort_button.dart';
 import 'package:musify/widgets/spinner.dart';
-import 'package:flutter_reorderable_list/flutter_reorderable_list.dart';
 
 enum PlaylistSortType { default_, title, artist, random }
 
@@ -278,7 +274,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
 
   Widget _buildDragHandle(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       child: Icon(
         Icons.drag_handle,
         color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
@@ -568,7 +564,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
   }
 
   void _updateSongsListOnRemove(int indexOfRemovedSong) {
-    final double? currentScrollPosition = _scrollController.hasClients
+    final currentScrollPosition = _scrollController.hasClients
         ? _scrollController.position.pixels
         : null;
 
@@ -697,7 +693,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
     }
 
     // Fallback: create a hash from title and artist
-    final fallbackId = '${title}_${artist}'.hashCode.toString();
+    final fallbackId = '${title}_$artist'.hashCode.toString();
     return 'song_${fallbackId}_$index';
   }
 
@@ -777,7 +773,6 @@ class _PlaylistPageState extends State<PlaylistPage> {
             ),
           },
           borderRadius: borderRadius,
-          showDragHandle: false,
         );
       }, childCount: songsList.length),
     );
@@ -856,11 +851,11 @@ class _PlaylistPageState extends State<PlaylistPage> {
   Widget _buildInstructionBanner() {
     return _sortingEnabled && _sortType == PlaylistSortType.default_
         ? Container(
-            padding: const EdgeInsets.all(12.0),
-            margin: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8.0),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,

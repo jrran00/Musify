@@ -24,6 +24,7 @@ import 'dart:io';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
+import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:musify/API/musify.dart';
 import 'package:musify/main.dart';
@@ -32,8 +33,6 @@ import 'package:musify/services/data_manager.dart';
 import 'package:musify/services/settings_manager.dart';
 import 'package:musify/utilities/mediaitem.dart';
 import 'package:rxdart/rxdart.dart';
-
-import 'package:flutter/services.dart';
 
 const platform = MethodChannel('com.gokadzev.musify/widget');
 
@@ -167,7 +166,7 @@ class MusifyAudioHandler extends BaseAudioHandler {
             logger.log('Duration stream error', error, stackTrace);
           },
         );
-    bool _lastPlayingState = false;
+    var _lastPlayingState = false;
     // Player state stream - handles state changes and errors
     audioPlayer.playerStateStream
         .distinct()
@@ -715,7 +714,9 @@ class MusifyAudioHandler extends BaseAudioHandler {
       if (success) {
         _consecutiveErrors = 0;
         _preloadUpcomingSongs();
+
         _updateWidget(); // This should be called
+
         logger.log(
           '✅ Song started successfully, widget should update',
           null,
@@ -723,6 +724,7 @@ class MusifyAudioHandler extends BaseAudioHandler {
         );
       } else {
         _currentQueueIndex = previousQueueIndex;
+
         _handlePlaybackError();
       }
     } catch (e, stackTrace) {
@@ -919,6 +921,7 @@ class MusifyAudioHandler extends BaseAudioHandler {
       if (songUrl == null || songUrl.isEmpty) {
         logger.log('Failed to get song URL for ${song['ytid']}', null, null);
         _lastError = 'Failed to get song URL';
+
         return false;
       }
 
@@ -942,6 +945,7 @@ class MusifyAudioHandler extends BaseAudioHandler {
     } catch (e, stackTrace) {
       logger.log('Error playing song', e, stackTrace);
       _lastError = e.toString();
+
       return false;
     }
   }
@@ -966,6 +970,7 @@ class MusifyAudioHandler extends BaseAudioHandler {
     }
 
     final file = File(audioPath);
+
     if (!await file.exists()) {
       logger.log('Offline audio file not found: $audioPath', null, null);
 
@@ -1390,8 +1395,8 @@ class MusifyAudioHandler extends BaseAudioHandler {
       final currentSong = song ?? this.currentSong ?? curSong;
 
       final isPlaying = audioPlayer.playing;
-      String title = 'Musify';
-      String artist = 'No song playing';
+      var title = 'Musify';
+      var artist = 'No song playing';
 
       if (currentSong != null) {
         title = currentSong['title']?.toString().trim() ?? 'Unknown Title';
@@ -1634,9 +1639,7 @@ void initializeWidgetChannel() {
     }
   });
 
-  Future.delayed(const Duration(seconds: 10), () {
-    testChannelConnection();
-  });
+  Future.delayed(const Duration(seconds: 10), testChannelConnection);
 }
 
 Future<void> testChannelConnection() async {
@@ -1731,7 +1734,6 @@ void testWidgetUpdate() {
     title: 'Test Song',
     artist: 'Test Artist',
     isPlaying: true,
-    albumPath: null,
   );
 }
 
@@ -1761,7 +1763,6 @@ void testWidgetButtons() {
     title: 'Test Song',
     artist: 'Test Artist',
     isPlaying: true,
-    albumPath: null,
   );
 }
 
@@ -1851,7 +1852,7 @@ void debugActivityTiming() {
   logger.log('   Current time: ${DateTime.now()}', null, null);
 
   // Test multiple times with increasing delays
-  for (int i = 1; i <= 10; i++) {
+  for (var i = 1; i <= 10; i++) {
     Future.delayed(Duration(seconds: i), () {
       logger.log('   Attempt $i at ${DateTime.now()}', null, null);
       testChannelConnection();

@@ -110,7 +110,7 @@ class AboutPage extends StatelessWidget {
                   ),
                 ),
                 title: const Text(
-                  'Jamil Jusoh',
+                  'MD JAMIL MD JUSOH',
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
                 subtitle: const Text('SOFTWARE ENGINEER'),

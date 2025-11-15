@@ -54,8 +54,11 @@ class MusifyWidgetProvider : AppWidgetProvider() {
         
         // Set the text
         views.setTextViewText(R.id.widget_title, title)
+        //views.setBoolean(R.id.widget_title, "setSelected", true)
         views.setTextViewText(R.id.widget_artist, if (artist.isEmpty()) "No song playing" else artist)
+       // views.setBoolean(R.id.widget_artist, "setSelected", true)
         
+
         Log.d(TAG, "📝 Set title: '$title', artist: '$artist'")
 
         // set play/pause icon

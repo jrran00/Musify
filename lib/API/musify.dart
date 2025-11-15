@@ -63,9 +63,10 @@ List userLikedPlaylists = Hive.box(
 List userRecentlyPlayed = Hive.box(
   'user',
 ).get('recentlyPlayedSongs', defaultValue: []);
-List userOfflineSongs = Hive.box(
-  'userNoBackup',
-).get('offlineSongs', defaultValue: []);
+// List userOfflineSongs = Hive.box(
+//   'userNoBackup',
+// ).get('offlineSongs', defaultValue: []);
+List userOfflineSongs = [];
 List suggestedPlaylists = [];
 List onlinePlaylists = [];
 

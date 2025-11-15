@@ -27,6 +27,7 @@ class CustomBar extends StatelessWidget {
     this.tileName,
     this.tileIcon, {
     this.onTap,
+    this.description,
     this.onLongPress,
     this.trailing,
     this.backgroundColor,
@@ -38,6 +39,7 @@ class CustomBar extends StatelessWidget {
 
   final String tileName;
   final IconData tileIcon;
+  final String? description;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final Widget? trailing;
@@ -68,6 +70,16 @@ class CustomBar extends StatelessWidget {
                 tileName,
                 style: TextStyle(fontWeight: FontWeight.w600, color: textColor),
               ),
+              subtitle: description != null
+                  ? Text(
+                      description!,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color:
+                            textColor?.withValues(alpha: 0.75) ??
+                            Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    )
+                  : null,
               trailing: trailing,
             ),
           ),

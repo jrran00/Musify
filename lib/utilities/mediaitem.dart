@@ -19,6 +19,8 @@
  *     please visit: https://github.com/gokadzev/Musify
  */
 
+import 'dart:io';
+
 import 'package:audio_service/audio_service.dart';
 
 Map mediaItemToMap(MediaItem mediaItem) => {
@@ -32,25 +34,46 @@ Map mediaItemToMap(MediaItem mediaItem) => {
   'isLive': mediaItem.extras!['isLive'],
 };
 
-MediaItem mapToMediaItem(Map song) => MediaItem(
-  id: song['id'].toString(),
-  album: '',
-  artist: song['artist'].toString().trim(),
-  title: song['title'].toString(),
-  artUri:
-      song['isOffline'] ?? false
-          ? Uri.file(song['highResImage'].toString())
-          : Uri.parse(song['highResImage'].toString()),
-  duration:
-      song['duration'] != null ? Duration(seconds: song['duration']) : null,
-  extras: {
-    'lowResImage': song['lowResImage'],
-    'ytid': song['ytid'],
-    'isLive': song['isLive'],
-    'isOffline': song['isOffline'],
-    'artWorkPath': song['highResImage'].toString(),
-  },
-);
+MediaItem mapToMediaItem(Map song) {
+  final highResImage = song['highResImage']?.toString();
+  final lowResImage = song['lowResImage']?.toString();
+  Uri? artUri;
+
+  if (song['isOffline'] ?? false) {
+    // For offline files, check if the file exists
+    if (lowResImage != null) {
+      if (lowResImage.contains('http')) {
+        artUri = Uri.parse(lowResImage);
+      } else {
+        final file = File(lowResImage);
+        artUri = file.existsSync()
+            ? Uri.file(lowResImage)
+            : Uri.parse(song['image']);
+      }
+    }
+  } else {
+    // For online files, use Uri.parse directly
+    artUri = highResImage != null ? Uri.parse(highResImage) : null;
+  }
+
+  return MediaItem(
+    id: song['id'].toString(),
+    album: '',
+    artist: song['artist'].toString().trim(),
+    title: song['title'].toString(),
+    artUri: artUri, // This can be null if file doesn't exist
+    duration: song['duration'] != null
+        ? Duration(seconds: song['duration'])
+        : null,
+    extras: {
+      'lowResImage': song['lowResImage'],
+      'ytid': song['ytid'],
+      'isLive': song['isLive'],
+      'isOffline': song['isOffline'],
+      'artWorkPath': highResImage,
+    },
+  );
+}
 
 /// Compares two Duration objects with tolerance for minor differences.
 ///

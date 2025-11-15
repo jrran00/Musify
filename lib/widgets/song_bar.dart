@@ -187,11 +187,81 @@ class _SongBarState extends State<SongBar> {
     return ValueListenableBuilder<bool>(
       valueListenable: _songOfflineStatus,
       builder: (_, isOffline, __) {
+        // if (_lowResImageUrl != '') {
+        //   return _OnlineArtwork(
+        //     lowResImageUrl: _lowResImageUrl,
+        //     size: size,
+        //     isDurationAvailable: isDurationAvailable,
+        //     primaryColor: primaryColor,
+        //     duration: widget.song['duration'],
+        //     isOffline: isOffline,
+        //   );
+        // }
+        //print(widget.song);
+        //print("title : ${widget.song['title']}");
+        //print("isOffline : ${widget.song['isOffline']}");
+        //print('_artworkPath : $_artworkPath');
+        //print('_lowResImageUrl : $_lowResImageUrl');
+
         if (isOffline && _artworkPath != null) {
+          final artworkFile = File(_artworkPath!);
+          final fileExists = artworkFile.existsSync();
+
+          //print('fileExists : $fileExists');
+          if (!fileExists) {
+            //     final songDetails = await getSongDetails(
+            //   userLikedSongsList.length,
+            //   songId,
+            // );
+
+            // File doesn't exist, fall back to online artwork or null
+            if (_lowResImageUrl != '') {
+              return _OnlineArtwork(
+                lowResImageUrl: widget.song['image']?.toString() ?? '',
+                size: size,
+                isDurationAvailable: isDurationAvailable,
+                primaryColor: primaryColor,
+                duration: widget.song['duration'],
+                isOffline: true,
+              );
+            }
+            return const NullArtworkWidget(iconSize: 30);
+          }
+
           return _OfflineArtwork(
-            artworkPath: _artworkPath,
+            artworkPath: _artworkPath!,
             size: size,
             primaryColor: primaryColor,
+          );
+        }
+        if (isOffline && _artworkPath == null && widget.song['image'] != '') {
+          if (_lowResImageUrl.contains('http')) {
+            return _OnlineArtwork(
+              lowResImageUrl:
+                  _lowResImageUrl, //widget.song['image']?.toString() ?? '',
+              size: size,
+              isDurationAvailable: isDurationAvailable,
+              primaryColor: primaryColor,
+              duration: widget.song['duration'],
+              isOffline: true,
+            );
+          } else {
+            return _OfflineArtwork(
+              artworkPath: _lowResImageUrl,
+              size: size,
+              primaryColor: primaryColor,
+            );
+          }
+        }
+
+        if (!_lowResImageUrl.contains('http')) {
+          return _OnlineArtwork(
+            lowResImageUrl: widget.song['highResImage']?.toString() ?? '',
+            size: size,
+            isDurationAvailable: isDurationAvailable,
+            primaryColor: primaryColor,
+            duration: widget.song['duration'],
+            isOffline: isOffline,
           );
         }
 
@@ -415,29 +485,34 @@ class _OfflineArtwork extends StatelessWidget {
       width: size,
       height: size,
       child: Stack(
-        alignment: Alignment.center,
         children: [
+          // Artwork
           ClipRRect(
             borderRadius: BorderRadiusGeometry.circular(
               commonMiniArtworkRadius,
             ),
             child: Image.file(
               File(artworkPath),
+              width: size,
+              height: size,
               fit: BoxFit.cover,
               cacheWidth: 256,
               cacheHeight: 256,
-              color: Theme.of(context).colorScheme.primaryContainer,
-              colorBlendMode: BlendMode.multiply,
-              opacity: const AlwaysStoppedAnimation(0.45),
             ),
           ),
-          SizedBox(
-            width: size - 10,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
+          // Small offline indicator in corner
+          Positioned(
+            bottom: 2,
+            right: 2,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface.withOpacity(0.8),
+                borderRadius: BorderRadius.circular(4),
+              ),
               child: Icon(
                 FluentIcons.cellular_off_24_filled,
-                size: 24,
+                size: 14, // Smaller size
                 color: primaryColor,
               ),
             ),
@@ -468,15 +543,13 @@ class _OnlineArtwork extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isImageSmall = lowResImageUrl.contains('default.jpg');
-    final shouldOverlayBeShown =
-        (isDurationAvailable && !isOffline) || isOffline;
 
     return SizedBox(
       width: size,
       height: size,
       child: Stack(
-        alignment: Alignment.center,
         children: <Widget>[
+          // Artwork
           CachedNetworkImage(
             key: ValueKey(lowResImageUrl),
             imageUrl: lowResImageUrl,
@@ -489,56 +562,58 @@ class _OnlineArtwork extends StatelessWidget {
               borderRadius: BorderRadiusGeometry.circular(
                 commonMiniArtworkRadius,
               ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Image(
-                    color: shouldOverlayBeShown
-                        ? Theme.of(context).colorScheme.primaryContainer
-                        : null,
-                    colorBlendMode: shouldOverlayBeShown
-                        ? BlendMode.multiply
-                        : null,
-                    opacity: shouldOverlayBeShown
-                        ? const AlwaysStoppedAnimation(0.45)
-                        : null,
-                    image: imageProvider,
-                    fit: isImageSmall ? BoxFit.fill : BoxFit.cover,
-                    width: size,
-                    height: size,
-                    centerSlice: isImageSmall
-                        ? const Rect.fromLTRB(1, 1, 1, 1)
-                        : null,
-                  ),
-                  if (isOffline)
-                    SizedBox(
-                      width: size - 10,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Icon(
-                          FluentIcons.cellular_off_24_filled,
-                          size: 24,
-                          color: primaryColor,
-                        ),
-                      ),
-                    ),
-                ],
+              child: Image(
+                image: imageProvider,
+                fit: isImageSmall ? BoxFit.fill : BoxFit.cover,
+                width: size,
+                height: size,
+                centerSlice: isImageSmall
+                    ? const Rect.fromLTRB(1, 1, 1, 1)
+                    : null,
               ),
             ),
             errorWidget: (context, url, error) =>
                 const NullArtworkWidget(iconSize: 30),
           ),
+
+          // Duration text (centered)
           if (isDurationAvailable && !isOffline)
-            SizedBox(
-              width: size - 10,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
+            Container(
+              width: size,
+              height: size,
+              alignment: Alignment.center,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(4),
+                ),
                 child: Text(
-                  '(${formatDuration(duration)})',
+                  formatDuration(duration),
                   style: TextStyle(
                     color: primaryColor,
                     fontWeight: FontWeight.bold,
+                    fontSize: 10, // Smaller font
                   ),
+                ),
+              ),
+            ),
+
+          // Small offline indicator in corner
+          if (isOffline)
+            Positioned(
+              bottom: 2,
+              right: 2,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Icon(
+                  FluentIcons.cellular_off_24_filled,
+                  size: 14, // Smaller size
+                  color: primaryColor,
                 ),
               ),
             ),
